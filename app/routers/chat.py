@@ -2,8 +2,8 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.services.agent import run_agent
-from app.services.llm import chat
 from app.services.agent_mcp import run_mcp_agent
+from app.services.llm import chat
 
 router = APIRouter()
 
@@ -32,6 +32,7 @@ class AgentRequest(BaseModel):
 
 class AgentResponse(BaseModel):
     answer: str
+
 
 class MCPAgentRequest(BaseModel):
     question: str
@@ -63,6 +64,7 @@ async def tool_chat_endpoint(request: ToolChatRequest) -> ToolChatResponse:
 async def agent_endpoint(request: AgentRequest) -> AgentResponse:
     answer = await run_agent(request.question)
     return AgentResponse(answer=answer)
+
 
 @router.post("/agent/mcp", response_model=MCPAgentResponse)
 async def mcp_agent_endpoint(request: MCPAgentRequest) -> MCPAgentResponse:
