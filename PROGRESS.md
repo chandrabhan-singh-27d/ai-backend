@@ -1,5 +1,7 @@
 # AI Backend - Project Progress
 
+> **Next session?** See [CONTINUATION.md](CONTINUATION.md) for full context to hand off to the next agent.
+
 ## Teaching & Development Style
 
 ### Rules
