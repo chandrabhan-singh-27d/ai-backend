@@ -7,31 +7,11 @@ from openai.types.chat.chat_completion_message_function_tool_call import (
     ChatCompletionMessageFunctionToolCall,
 )
 
+from app.services.embeddings import embed
 from app.services.tools import calculate
+from app.services.vector_store import search, store
 
 client = AsyncOpenAI(api_key=os.environ["GROQ_API_KEY"], base_url="https://api.groq.com/openai/v1")
-
-TOOLS: list[ChatCompletionToolParam] = [
-    ChatCompletionToolParam(
-        type="function",
-        function={
-            "name": "calculate",
-            "description": "Evaluate a mathematical expression",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "expression": {
-                        "type": "string",
-                        "description": "Math expressions like '2+2' or 'sqrt(16)'",
-                    }
-                },
-                "required": ["expression"],
-            },
-        },
-    )
-]
-
-TOOL_MAP = {"calculate": calculate}
 
 
 async def chat(message: str, tools_enabled: bool = False) -> str:
@@ -77,3 +57,67 @@ async def chat(message: str, tools_enabled: bool = False) -> str:
         )
         return final.choices[0].message.content or ""
     return choice.message.content or ""
+
+
+def _search_documents(query: str, top_k: int = 3) -> str:
+    query_embedding = embed([query])[0]
+    results = search(query_embedding, top_k=top_k)
+    if not results:
+        return "No results."
+    return "\n".join(f"- [{r['id']}] {r['text']} (score: {r['score']:.3f})" for r in results)
+
+
+def _list_documents() -> str:
+    if not store:
+        return "No documents stored."
+    return "\n".join(f"- [{doc_id}] {doc['text'][:80]}" for doc_id, doc in store.items())
+
+
+TOOLS: list[ChatCompletionToolParam] = [
+    ChatCompletionToolParam(
+        type="function",
+        function={
+            "name": "calculate",
+            "description": "Evaluate a mathematical expression",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "expression": {
+                        "type": "string",
+                        "description": "Math expressions like '2+2' or 'sqrt(16)'",
+                    }
+                },
+                "required": ["expression"],
+            },
+        },
+    ),
+    ChatCompletionToolParam(
+        type="function",
+        function={
+            "name": "search_documents",
+            "description": "Search documents by semantic similarity",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Search query"},
+                    "top_k": {"type": "integer", "description": "Number of results"},
+                },
+                "required": ["query"],
+            },
+        },
+    ),
+    ChatCompletionToolParam(
+        type="function",
+        function={
+            "name": "list_documents",
+            "description": "List all stored documents",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    ),
+]
+
+TOOL_MAP = {
+    "calculate": calculate,
+    "search_documents": _search_documents,
+    "list_documents": _list_documents,
+}
