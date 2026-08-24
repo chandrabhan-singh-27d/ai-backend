@@ -53,8 +53,8 @@
 
 | # | Topic | Status | Key Concepts |
 |---|---|---|---|
-| 14 | Agent Frameworks | 🔜 | LangGraph, CrewAI, orchestration |
-| 15 | Evaluation | ⬜ | Metrics, testing LLM outputs, benchmarks |
+| 14 | Agent Frameworks | ✅ | LangGraph, StateGraph, nodes/edges, reducers, recursion_limit |
+| 15 | Evaluation | ✅ | LLM-as-judge, rubric scoring (1–5), golden fixtures, retrieval vs faithfulness layers |
 | 16 | Observability | ⬜ | Logging, tracing, monitoring |
 | 17 | Auth & API Keys | ⬜ | Authentication, rate limiting, API key management |
 | 18 | Background jobs | ⬜ | Task queues, async processing |
@@ -74,7 +74,7 @@ ai-backend/
 │   │   ├── health.py              # GET /health
 │   │   ├── models.py              # GET/POST /models (TypedDict + Pydantic)
 │   │   ├── demo.py                # Sync/async demos, httpx
-│   │   ├── chat.py                # POST /chat, /chat/tools, /agent, /agent/mcp
+│   │   ├── chat.py                # POST /chat, /chat/tools, /agent, /agent/mcp, /agent/graph
 │   │   ├── embeddings.py          # POST /embeddings, /similarity
 │   │   └── documents.py           # POST /documents, /search, DELETE /documents/{id}
 │   └── services/
@@ -84,11 +84,16 @@ ai-backend/
 │       ├── tools.py               # Calculator tool (eval with whitelist)
 │       ├── rag.py                 # RAG pipeline (retrieve → augment → generate)
 │       ├── agent.py               # Direct tool-calling agent
+│       ├── agent_graph.py         # LangGraph agent (AgentState, nodes, conditional edges)
 │       └── agent_mcp.py           # MCP-based agent (dynamic tool discovery)
 ├── servers/
 │   └── documents.py               # MCP server (documents CRUD)
 ├── tools/
-│   └── mcp_client.py              # MCP test client
+│   ├── mcp_client.py              # MCP test client
+│   ├── test_agent_graph.py        # Side-by-side hand-rolled vs LangGraph agent test
+│   ├── eval_cases.json            # Golden RAG eval cases (incl. unanswerable refusal case)
+│   ├── corpus.json                # Seed corpus for self-contained eval runs
+│   └── run_eval.py                # Eval harness (seed → retrieve-check → generate → judge → report)
 ├── pyproject.toml                 # Project config, deps, ruff, pyright
 ├── .env                           # GROQ_API_KEY (gitignored)
 ├── .gitignore
@@ -108,6 +113,9 @@ ai-backend/
 | MCP over hardcoded tools | Decoupled architecture, tools discoverable at runtime |
 | Two agent implementations | Shows tradeoffs: direct (simple) vs MCP (flexible) |
 | `uv` over `pip` | Faster, better dependency resolution, lockfile support |
+| Judge = separate client, temperature=0 | Eval concerns stay out of prod service; frozen judge = non-flaky suite |
+| Extraction over strict JSON mode | Reasoning models leak CoT into structured output; parse defensively instead of coercing format |
+| Layered grading (retrieval check vs LLM judge) | Score failures localize: wrong docs = embedding problem, unsupported claims = generation problem |
 
 ---
 
@@ -143,3 +151,15 @@ ai-backend/
 - Created `app/services/agent_mcp.py` (MCP-based agent)
 - Updated `app/routers/chat.py` (/agent, /agent/mcp endpoints)
 - Added document tools to TOOLS/TOOL_MAP in llm.py
+
+### Topic 14: Agent Frameworks
+- Created `app/services/agent_graph.py` (AgentState reducer, call_llm/run_tools nodes, route_after_llm conditional edge)
+- Created `tools/test_agent_graph.py` (side-by-side hand-rolled vs LangGraph comparison)
+- Updated `app/routers/chat.py` (/agent/graph endpoint)
+- Added `langgraph` dependency
+
+### Topic 15: Evaluation
+- Created `tools/eval_cases.json` (5 golden cases incl. unanswerable refusal case)
+- Created `tools/corpus.json` (seed corpus for self-contained runs)
+- Created `tools/run_eval.py` (idempotent seeding, independent retrieval check, temperature-0 judge, defensive verdict parsing, PASS/FAIL exit code)
+- Fixed `app/services/llm.py`: qwen chain-of-thought leaked into user-facing answers; added `reasoning_format: hidden` + `_strip_reasoning` safety net

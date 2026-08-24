@@ -1,0 +1,47 @@
+[
+  {
+    "id": "gil-no-parallelism",
+    "question": "Why don't CPU-bound Python threads achieve real parallelism?",
+    "answerable": true,
+    "expected_doc_ids": ["doc-python-gil"],
+    "expected_facts": [
+      "the GIL lets only one thread execute Python bytecode at a time"
+    ]
+  },
+  {
+    "id": "fastapi-validation-status",
+    "question": "What HTTP status does FastAPI return when a request body fails Pydantic validation?",
+    "answerable": true,
+    "expected_doc_ids": ["doc-fastapi-pydantic"],
+    "expected_facts": [
+      "validation failures return HTTP status 422",
+      "the response includes details about which fields failed"
+    ]
+  },
+  {
+    "id": "cosine-similarity-meaning",
+    "question": "What does a cosine similarity score of 1 mean?",
+    "answerable": true,
+    "expected_doc_ids": ["doc-vector-sim"],
+    "expected_facts": [
+      "a cosine similarity of 1 means the vectors point in identical direction",
+      "cosine similarity ranges between -1 and 1"
+    ]
+  },
+  {
+    "id": "sourdough-doubling-time",
+    "question": "How long does a sourdough starter take to double in volume after feeding?",
+    "answerable": true,
+    "expected_doc_ids": ["doc-decoy-sourdough"],
+    "expected_facts": [
+      "a healthy starter doubles within roughly 4 to 8 hours of feeding"
+    ]
+  },
+  {
+    "id": "unanswerable-postgres-port",
+    "question": "What port does PostgreSQL listen on by default?",
+    "answerable": false,
+    "expected_doc_ids": [],
+    "expected_facts": []
+  }
+]

@@ -14,17 +14,25 @@ from app.services.vector_store import search, store
 client = AsyncOpenAI(api_key=os.environ["GROQ_API_KEY"], base_url="https://api.groq.com/openai/v1")
 
 
+def _strip_reasoning(content: str) -> str:
+    if "</think>" in content:
+        return content.split("</think>", 1)[1].lstrip()
+    return content
+
+
 async def chat(message: str, tools_enabled: bool = False) -> str:
     if tools_enabled:
         response = await client.chat.completions.create(
             model="qwen/qwen3.6-27b",
             messages=[{"role": "user", "content": message}],
             tools=TOOLS,
+            extra_body={"reasoning_format": "hidden"},
         )
     else:
         response = await client.chat.completions.create(
             model="qwen/qwen3.6-27b",
             messages=[{"role": "user", "content": message}],
+            extra_body={"reasoning_format": "hidden"},
         )
 
     choice = response.choices[0]
@@ -54,9 +62,10 @@ async def chat(message: str, tools_enabled: bool = False) -> str:
         final = await client.chat.completions.create(
             model="qwen/qwen3.6-27b",
             messages=messages,  # type: ignore[arg-type]
+            extra_body={"reasoning_format": "hidden"},
         )
-        return final.choices[0].message.content or ""
-    return choice.message.content or ""
+        return _strip_reasoning(final.choices[0].message.content or "")
+    return _strip_reasoning(choice.message.content or "")
 
 
 def _search_documents(query: str, top_k: int = 3) -> str:

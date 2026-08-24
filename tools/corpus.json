@@ -1,0 +1,26 @@
+[
+  {
+    "id": "doc-python-gil",
+    "text": "The Global Interpreter Lock (GIL) is a mutex in CPython that allows only one thread to execute Python bytecode at a time. CPU-bound multithreaded Python programs do not achieve parallelism because of the GIL, while I/O-bound programs benefit because the lock is released during blocking operations."
+  },
+  {
+    "id": "doc-fastapi-pydantic",
+    "text": "FastAPI uses Pydantic models to validate request bodies automatically. When validation fails, FastAPI responds with HTTP status 422 and a JSON detail array describing each invalid field. Pydantic type annotations also power the auto-generated OpenAPI documentation served at /docs."
+  },
+  {
+    "id": "doc-rag-definition",
+    "text": "Retrieval-Augmented Generation (RAG) grounds an LLM's answer in external knowledge: the system first retrieves relevant documents, then injects them into the prompt as context before generation. RAG reduces hallucination on private or recent facts the model was never trained on."
+  },
+  {
+    "id": "doc-vector-sim",
+    "text": "Cosine similarity measures the angle between two embedding vectors and ranges from -1 to 1, with 1 meaning identical direction. Sentence embeddings from models like all-MiniLM-L6-v2 place semantically similar texts close together, so cosine similarity works as a semantic search ranking function."
+  },
+  {
+    "id": "doc-http-409",
+    "text": "HTTP status 409 Conflict indicates the request could not be completed due to a conflict with the current state of the resource, such as a duplicate creation or a stale update. It differs from 422, which signals that the payload itself failed validation."
+  },
+  {
+    "id": "doc-decoy-sourdough",
+    "text": "Sourdough starter is a fermented mix of flour and water containing wild yeast and lactic acid bacteria. A healthy starter doubles in volume within 4 to 8 hours of feeding and smells pleasantly sour."
+  }
+]
