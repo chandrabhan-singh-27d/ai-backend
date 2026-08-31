@@ -3,8 +3,10 @@ from fastapi import FastAPI
 
 from app.middlewares.request_context import request_context_middleware
 from app.routers import chat, demo, documents, embeddings, health, models, rag
+from app.services.logging import setup_logging
 
 load_dotenv()
+setup_logging()
 app = FastAPI(title="AI Backend")
 app.middleware("http")(request_context_middleware)
 app.include_router(health.router)
