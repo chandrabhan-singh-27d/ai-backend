@@ -1,9 +1,8 @@
 import json
 import logging
+from typing import cast
 
 from app.services.context import get_request_context
-
-LOG_FORMAT_FIELDS = ["time", "level", "logger", "message", "request_id", "client_id"]
 
 
 class JSONFormatter(logging.Formatter):
@@ -18,7 +17,7 @@ class JSONFormatter(logging.Formatter):
         except AssertionError:
             pass
 
-        payload = {
+        payload: dict[str, object] = {
             "time": self.formatTime(record=record),
             "level": record.levelname,
             "logger": record.name,
@@ -30,8 +29,9 @@ class JSONFormatter(logging.Formatter):
         if record.exc_info:
             payload["exc_info"] = self.formatException(record.exc_info)
 
-        if "extra" in getattr(record, "extra_fields", {}):
-            payload.update(getattr(record, "extra_fields", {}))
+        extra_fields = cast("dict[str, object] | None", record.__dict__.get("extra_fields"))
+        if isinstance(extra_fields, dict):
+            payload.update(extra_fields)
 
         return json.dumps(payload)
 
