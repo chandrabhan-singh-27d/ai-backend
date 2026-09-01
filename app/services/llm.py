@@ -8,6 +8,7 @@ from openai.types.chat.chat_completion_message_function_tool_call import (
 )
 
 from app.services.embeddings import embed
+from app.services.metrics import LLM_TOKENS, measure_llm_call
 from app.services.tools import calculate
 from app.services.vector_store import search, store
 
@@ -22,18 +23,28 @@ def _strip_reasoning(content: str) -> str:
 
 async def chat(message: str, tools_enabled: bool = False) -> str:
     if tools_enabled:
-        response = await client.chat.completions.create(
-            model="qwen/qwen3.6-27b",
-            messages=[{"role": "user", "content": message}],
-            tools=TOOLS,
-            extra_body={"reasoning_format": "hidden"},
-        )
+        with measure_llm_call(model="qwen/qwen3.6-27b", tools_enabled=True, segment="tool_round"):
+            response = await client.chat.completions.create(
+                model="qwen/qwen3.6-27b",
+                messages=[{"role": "user", "content": message}],
+                tools=TOOLS,
+                extra_body={"reasoning_format": "hidden"},
+            )
+        if response.usage is not None:
+            LLM_TOKENS.labels(model="qwen/qwen3.6-27b", tools_enabled="true").inc(
+                response.usage.total_tokens
+            )
     else:
-        response = await client.chat.completions.create(
-            model="qwen/qwen3.6-27b",
-            messages=[{"role": "user", "content": message}],
-            extra_body={"reasoning_format": "hidden"},
-        )
+        with measure_llm_call(model="qwen/qwen3.6-27b", tools_enabled=True, segment="final"):
+            response = await client.chat.completions.create(
+                model="qwen/qwen3.6-27b",
+                messages=[{"role": "user", "content": message}],
+                extra_body={"reasoning_format": "hidden"},
+            )
+        if response.usage is not None:
+            LLM_TOKENS.labels(model="qwen/qwen3.6-27b", tools_enabled="false").inc(
+                response.usage.total_tokens
+            )
 
     choice = response.choices[0]
 
@@ -59,11 +70,16 @@ async def chat(message: str, tools_enabled: bool = False) -> str:
             {"role": "tool", "tool_call_id": tool_call.id, "content": str(result)},
         ]
 
-        final = await client.chat.completions.create(
-            model="qwen/qwen3.6-27b",
-            messages=messages,  # type: ignore[arg-type]
-            extra_body={"reasoning_format": "hidden"},
-        )
+        with measure_llm_call(model="qwen/qwen3.6-27b", tools_enabled=True, segment="final"):
+            final = await client.chat.completions.create(
+                model="qwen/qwen3.6-27b",
+                messages=messages,  # type: ignore[arg-type]
+                extra_body={"reasoning_format": "hidden"},
+            )
+        if final.usage is not None:
+            LLM_TOKENS.labels(model="qwen/qwen3.6-27b", tools_enabled="true").inc(
+                final.usage.total_tokens
+            )
         return _strip_reasoning(final.choices[0].message.content or "")
     return _strip_reasoning(choice.message.content or "")
 

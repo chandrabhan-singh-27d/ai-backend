@@ -9,6 +9,7 @@ dependencies = [
     "langgraph>=1.2.11",
     "mcp>=2.0.0",
     "openai>=3.2.0",
+    "prometheus-client>=0.26.0",
     "python-dotenv>=1.2.2",
     "sentence-transformers>=6.0.0",
     "uvicorn[standard]>=0.52.3",
