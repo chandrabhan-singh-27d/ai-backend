@@ -35,7 +35,7 @@ async def chat(message: str, tools_enabled: bool = False) -> str:
                 response.usage.total_tokens
             )
     else:
-        with measure_llm_call(model="qwen/qwen3.6-27b", tools_enabled=True, segment="final"):
+        with measure_llm_call(model="qwen/qwen3.6-27b", tools_enabled=False, segment="final"):
             response = await client.chat.completions.create(
                 model="qwen/qwen3.6-27b",
                 messages=[{"role": "user", "content": message}],
