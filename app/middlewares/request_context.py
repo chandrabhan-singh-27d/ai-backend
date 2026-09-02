@@ -4,7 +4,7 @@ from uuid import uuid4
 from starlette.requests import Request
 from starlette.responses import Response
 
-from app.services.context import RequestContext, set_request_context
+from app.services.context import RequestContext, reset_request_context, set_request_context
 
 MiddlewareCallable = Callable[[Request], Awaitable[Response]]
 
@@ -14,8 +14,11 @@ async def request_context_middleware(request: Request, call_next: MiddlewareCall
     raw_client_id = request.headers.get("X-Request-Id", "")
     client_id = raw_client_id.strip()[:128] or "-"
 
-    set_request_context(RequestContext(request_id=request_id, client_id=client_id))
+    token = set_request_context(RequestContext(request_id=request_id, client_id=client_id))
 
-    response = await call_next(request)
-    response.headers["X-Request-Id"] = request_id
-    return response
+    try:
+        response = await call_next(request)
+        response.headers["X-Request-Id"] = request_id
+        return response
+    finally:
+        reset_request_context(token)
