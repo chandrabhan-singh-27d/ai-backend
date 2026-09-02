@@ -29,6 +29,7 @@ def measure_llm_call(model: str, tools_enabled: bool, segment: str):
     try:
         yield
     finally:
-        LLM_LATENCY.labels(model=model, tools_enabled=str(tools_enabled), segment=segment).observe(
+        tools_label = "true" if tools_enabled else "false"
+        LLM_LATENCY.labels(model=model, tools_enabled=tools_label, segment=segment).observe(
             perf_counter() - start
         )
