@@ -30,7 +30,7 @@ async def request_context_middleware(request: Request, call_next: MiddlewareCall
         route = request.scope.get("route")
         path: str = getattr(route, "path", "unmatched")
         if path != "/metrics":
-            HTTP_REQUESTS.labels(method=request.method, path=path, status=status)
+            HTTP_REQUESTS.labels(method=request.method, path=path, status=status).inc()
             HTTP_REQUEST_DURATION.labels(method=request.method, path=path).observe(
                 perf_counter() - start
             )
