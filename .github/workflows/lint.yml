@@ -1,0 +1,23 @@
+name: Lint & Typecheck
+
+on: [push]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install dependencies
+        run: uv sync --dev
+
+      - name: Run ruff
+        run: uv run ruff check app/ servers/ tools/
+
+      - name: Run pyright
+        run: uv run pyright app/ servers/
