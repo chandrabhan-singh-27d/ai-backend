@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
@@ -7,6 +9,7 @@ from app.services.agent_mcp import run_mcp_agent
 from app.services.llm import chat
 
 router = APIRouter()
+logger = logging.getLogger("app.routers.chat")
 
 
 class ChatRequest(BaseModel):
@@ -49,6 +52,7 @@ async def chat_endpoint(request: ChatRequest) -> ChatResponse:
         content = await chat(request.message)
         return ChatResponse(response=content, model="qwen/qwen3.6-27b")
     except Exception as e:
+        logger.exception("chat_endpoint_failed")
         raise HTTPException(status_code=502, detail=str(e)) from e
 
 
@@ -58,6 +62,7 @@ async def tool_chat_endpoint(request: ToolChatRequest) -> ToolChatResponse:
         content = await chat(request.message, tools_enabled=True)
         return ToolChatResponse(response=content, tool_used=True)
     except Exception as e:
+        logger.exception("tool_chat_endpoint_failed")
         raise HTTPException(status_code=502, detail=str(e)) from e
 
 

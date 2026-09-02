@@ -1,8 +1,11 @@
+import logging
 from typing import TypedDict
 
 from app.services.embeddings import embed
 from app.services.llm import chat
 from app.services.vector_store import search
+
+logger = logging.getLogger("app.services.rag")
 
 
 class Document(TypedDict):
@@ -25,5 +28,9 @@ Question: {question}"""
 async def answer_question(question: str) -> str:
     query_embedding = embed([question])[0]
     searched_documents = search(query_embedding, top_k=3)
+    logger.info(
+        "rag_retrieval",
+        extra={"extra_fields": {"question": question[:100], "doc_count": len(searched_documents)}},
+    )
     prompt = build_prompt(question, documents=searched_documents)
     return await chat(prompt)

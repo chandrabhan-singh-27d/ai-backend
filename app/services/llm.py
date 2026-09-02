@@ -1,8 +1,9 @@
 import json
+import logging
 import os
 
 from openai import AsyncOpenAI
-from openai.types.chat import ChatCompletionToolParam
+from openai.types.chat import ChatCompletion, ChatCompletionToolParam
 from openai.types.chat.chat_completion_message_function_tool_call import (
     ChatCompletionMessageFunctionToolCall,
 )
@@ -12,7 +13,24 @@ from app.services.metrics import LLM_TOKENS, measure_llm_call
 from app.services.tools import calculate
 from app.services.vector_store import search, store
 
+logger = logging.getLogger("app.services.llm")
+
 client = AsyncOpenAI(api_key=os.environ["GROQ_API_KEY"], base_url="https://api.groq.com/openai/v1")
+
+
+def _log_llm_call(segment: str, tools_enabled: bool, response: ChatCompletion) -> None:
+    tokens = response.usage.total_tokens if response.usage else 0
+    logger.info(
+        "llm_call",
+        extra={
+            "extra_fields": {
+                "segment": segment,
+                "model": "qwen/qwen3.6-27b",
+                "tools_enabled": "true" if tools_enabled else "false",
+                "tokens": tokens,
+            }
+        },
+    )
 
 
 def _strip_reasoning(content: str) -> str:
@@ -34,6 +52,7 @@ async def chat(message: str, tools_enabled: bool = False) -> str:
             LLM_TOKENS.labels(model="qwen/qwen3.6-27b", tools_enabled="true").inc(
                 response.usage.total_tokens
             )
+        _log_llm_call("tool_round", True, response)
     else:
         with measure_llm_call(model="qwen/qwen3.6-27b", tools_enabled=False, segment="final"):
             response = await client.chat.completions.create(
@@ -45,6 +64,7 @@ async def chat(message: str, tools_enabled: bool = False) -> str:
             LLM_TOKENS.labels(model="qwen/qwen3.6-27b", tools_enabled="false").inc(
                 response.usage.total_tokens
             )
+        _log_llm_call("final", False, response)
 
     choice = response.choices[0]
 
@@ -80,6 +100,7 @@ async def chat(message: str, tools_enabled: bool = False) -> str:
             LLM_TOKENS.labels(model="qwen/qwen3.6-27b", tools_enabled="true").inc(
                 final.usage.total_tokens
             )
+        _log_llm_call("final", True, final)
         return _strip_reasoning(final.choices[0].message.content or "")
     return _strip_reasoning(choice.message.content or "")
 
