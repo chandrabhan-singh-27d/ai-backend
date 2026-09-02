@@ -55,7 +55,7 @@
 |---|---|---|---|
 | 14 | Agent Frameworks | ✅ | LangGraph, StateGraph, nodes/edges, reducers, recursion_limit |
 | 15 | Evaluation | ✅ | LLM-as-judge, rubric scoring (1–5), golden fixtures, retrieval vs faithfulness layers |
-| 16 | Observability | ⬜ | Logging, tracing, monitoring |
+| 16 | Observability | ✅ | Structured JSON logging, request tracing via ContextVar, Prometheus metrics |
 | 17 | Auth & API Keys | ⬜ | Authentication, rate limiting, API key management |
 | 18 | Background jobs | ⬜ | Task queues, async processing |
 | 19 | Deployment | ⬜ | Docker, CI/CD, hosting |
@@ -76,7 +76,10 @@ ai-backend/
 │   │   ├── demo.py                # Sync/async demos, httpx
 │   │   ├── chat.py                # POST /chat, /chat/tools, /agent, /agent/mcp, /agent/graph
 │   │   ├── embeddings.py          # POST /embeddings, /similarity
-│   │   └── documents.py           # POST /documents, /search, DELETE /documents/{id}
+│   │   ├── documents.py           # POST /documents, /search, DELETE /documents/{id}
+│   │   └── metrics.py             # GET /metrics (Prometheus scrape endpoint)
+│   ├── middlewares/
+│   │   └── request_context.py     # Mints request_id, sets ContextVar, HTTP + LLM metrics
 │   └── services/
 │       ├── llm.py                 # OpenAI client (Groq), tools, TOOLS, TOOL_MAP
 │       ├── embeddings.py          # sentence-transformers, cosine similarity
@@ -85,7 +88,10 @@ ai-backend/
 │       ├── rag.py                 # RAG pipeline (retrieve → augment → generate)
 │       ├── agent.py               # Direct tool-calling agent
 │       ├── agent_graph.py         # LangGraph agent (AgentState, nodes, conditional edges)
-│       └── agent_mcp.py           # MCP-based agent (dynamic tool discovery)
+│       ├── agent_mcp.py           # MCP-based agent (dynamic tool discovery)
+│       ├── context.py             # RequestContext dataclass + ContextVar (token-reset safe)
+│       ├── logging.py             # JSONFormatter + setup_logging (structured, request-scoped)
+│       └── metrics.py             # Prometheus histograms/counters (LLM + HTTP) + measure helper
 ├── servers/
 │   └── documents.py               # MCP server (documents CRUD)
 ├── tools/
@@ -116,6 +122,10 @@ ai-backend/
 | Judge = separate client, temperature=0 | Eval concerns stay out of prod service; frozen judge = non-flaky suite |
 | Extraction over strict JSON mode | Reasoning models leak CoT into structured output; parse defensively instead of coercing format |
 | Layered grading (retrieval check vs LLM judge) | Score failures localize: wrong docs = embedding problem, unsupported claims = generation problem |
+| ContextVar + Token.reset for request state | Async-safe per-task state; reset prevents stale `request_id` leaking into background tasks/threads |
+| JSON formatter reading the same ContextVar | Every log line auto-carries `request_id`/`client_id` regardless of logger or call depth |
+| Prometheus `client` (not auto-instrument wizard) | Learn the exposition format + cardinality discipline; metrics only where they matter (LLM, HTTP) |
+| Route pattern (`scope["route"].path`) not concrete URL for `path` label | Avoids cardinality explosion from path parameters like `/documents/{id}` |
 
 ---
 
@@ -163,3 +173,14 @@ ai-backend/
 - Created `tools/corpus.json` (seed corpus for self-contained runs)
 - Created `tools/run_eval.py` (idempotent seeding, independent retrieval check, temperature-0 judge, defensive verdict parsing, PASS/FAIL exit code)
 - Fixed `app/services/llm.py`: qwen chain-of-thought leaked into user-facing answers; added `reasoning_format: hidden` + `_strip_reasoning` safety net
+
+### Topic 12–16 addendum (tracing, logging, metrics)
+- Created `app/services/context.py` (RequestContext dataclass, ContextVar, token-based set/reset)
+- Created `app/services/logging.py` (JSONFormatter, setup_logging)
+- Created `app/services/metrics.py` (LLM_LATENCY/LLM_TOKENS/HTTP_REQUESTS/HTTP_REQUEST_DURATION, measure_llm_call)
+- Created `app/middlewares/request_context.py` (request_id/client_id ContextVar middleware + HTTP metrics)
+- Created `app/routers/metrics.py` (Prometheus scrape endpoint)
+- Updated `app/main.py` (setup_logging, register middleware + metrics router)
+- Added application logging to `llm.py` (llm_call), `rag.py` (rag_retrieval), `chat.py` (error paths), `request_context.py` (request lifecycle)
+- Instrumented agent LLM calls (`agent.py`/`agent_graph.py`/`agent_mcp.py`) with `measure_llm_call` + token counters
+- Added `prometheus-client` dependency

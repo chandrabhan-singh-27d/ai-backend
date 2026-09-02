@@ -10,7 +10,7 @@ Building a production-grade AI backend incrementally with Python/FastAPI/Groq. P
 - Python 3.14, pyright strict mode, Ruff rules `["E", "F", "I", "UP", "B", "SIM", "RUF"]`, line-length 100
 - LLM: Groq (GROQ_API_KEY), no OpenAI/Anthropic keys
 
-## What's Built (Topics 1-15 ✅)
+## What's Built (Topics 1-16 ✅)
 
 ### Foundations
 1. **Project structure** — flat layout, `app/` package, pyproject.toml
@@ -46,6 +46,11 @@ Building a production-grade AI backend incrementally with Python/FastAPI/Groq. P
     - Defensive parse pipeline survived live failures: `<think>` strip → skip to first `{` → `raw_decode` first JSON value → array-unwrap via cast loop → Pydantic validate
     - Suite gate: all-retrieval AND min score ≥ 3 AND avg ≥ 4.0 → `sys.exit(0/1)` for CI
     - Status: PASS — 5/5 retrieval, avg 4.60/5, min 4/5
+16. **Observability** — logging + tracing + monitoring:
+    - **Tracing**: `RequestContext` dataclass + `ContextVar` in `app/services/context.py`; middleware mints `request_id` (uuid4), captures sanitized client `X-Request-Id` as `client_id`; `Token`-based reset prevents stale context leaking into background tasks/threads; backend ID echoed as `X-Request-Id` response header
+    - **Logging**: `JSONFormatter` in `app/services/logging.py` emits one-line JSON with `request_id`/`client_id` on every logger (incl. httpx); `setup_logging()` wired in main; app logs at middleware (request lifecycle), llm (`llm_call`), rag (`rag_retrieval`), chat router (error paths)
+    - **Monitoring**: `prometheus-client` in `app/services/metrics.py` + `/metrics` route; `llm_latency_seconds` Histogram (labels model/tools_enabled/segment: tool_round/final/agent_round/agent_graph/agent_mcp), `llm_tokens_total` Counter, `http_requests_total` Counter + `http_request_duration_seconds` Histogram (labels method/path/status; path uses `scope["route"].path` to avoid cardinality explosion; `/metrics` excluded)
+    - `measure_llm_call()` context manager wraps every LLM call (plain chat + all three agents) for timing + token counting
 
 ### Key Files
 - `app/main.py` — mounts 6 routers (health, models, demo, chat, embeddings, documents, rag)
@@ -57,6 +62,11 @@ Building a production-grade AI backend incrementally with Python/FastAPI/Groq. P
 - `app/services/agent.py` — run_agent() with tool loop
 - `app/services/agent_graph.py` — LangGraph agent (AgentState, call_llm, run_tools, route_after_llm, graph, run_agent_graph)
 - `app/services/agent_mcp.py` — run_mcp_agent() connecting to MCP server
+- `app/services/context.py` — RequestContext dataclass, ContextVar, token-based set/reset
+- `app/services/logging.py` — JSONFormatter (request-scoped fields) + setup_logging
+- `app/services/metrics.py` — Prometheus metrics (LLM latency/tokens, HTTP count/duration) + measure_llm_call
+- `app/middlewares/request_context.py` — request_id/client_id middleware + HTTP metrics
+- `app/routers/metrics.py` — GET /metrics scrape endpoint
 - `servers/documents.py` — MCP 2.0 server (list_tools, call_tool callbacks)
 - `tools/mcp_client.py` — MCPTestClient with DocumentsTest class
 - `tools/test_agent_graph.py` — side-by-side hand-rolled vs langgraph agent test
@@ -90,8 +100,7 @@ Building a production-grade AI backend incrementally with Python/FastAPI/Groq. P
 7. Never edit files without asking — tell user what to edit
 
 ## Next Topics
-16. **Observability** — NEXT (logging, tracing, monitoring)
-17. Auth & API Keys
+17. **Auth & API Keys** — NEXT
 18. Background jobs
 19. Deployment
 20. Production architecture
@@ -116,4 +125,6 @@ Building a production-grade AI backend incrementally with Python/FastAPI/Groq. P
 - Test agents side-by-side with: `PYTHONPATH=. uv run python tools/test_agent_graph.py`
 - Run eval suite with: `PYTHONPATH=. uv run python tools/run_eval.py` (exit 1 = suite FAIL; currently PASS, avg 4.60/5)
 - Document ingestion needed before RAG/agent tests work
+- Inspect structured logs in the server stdout (JSON lines); `request_id` correlates a request's journey
+- Prometheus metrics at `/metrics` for LLM latency/tokens (segments: tool_round/final/agent_round/agent_graph/agent_mcp) and HTTP count/duration (path label uses route pattern, `/metrics` excluded)
 - The `suppress(BrokenPipeError)` in servers/documents.py may need attention — was replaced with `suppress(BaseExceptionGroup)` then removed when switching to `anyio.run()`
