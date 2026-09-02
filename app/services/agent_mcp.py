@@ -1,4 +1,6 @@
 import json
+import logging
+import os
 from typing import TypedDict
 
 from mcp import ClientSession, StdioServerParameters
@@ -9,8 +11,12 @@ from openai.types.chat.chat_completion_message_function_tool_call import (
     ChatCompletionMessageFunctionToolCall,
 )
 
+from app.services.metrics import LLM_TOKENS, measure_llm_call
+
+logger = logging.getLogger("app.services.agent_mcp")
+
 client = AsyncOpenAI(
-    api_key=__import__("os").environ["GROQ_API_KEY"],
+    api_key=os.environ["GROQ_API_KEY"],
     base_url="https://api.groq.com/openai/v1",
 )
 
@@ -53,11 +59,18 @@ async def run_mcp_agent(question: str, max_steps: int = 5) -> str:
         messages: list[dict[str, object]] = [{"role": "user", "content": question}]
 
         for _step in range(max_steps):
-            response = await client.chat.completions.create(
-                model="qwen/qwen3.6-27b",
-                messages=messages,  # type: ignore[arg-type]
-                tools=openai_tools,  # type: ignore[arg-type]
-            )
+            with measure_llm_call(
+                model="qwen/qwen3.6-27b", tools_enabled=True, segment="agent_mcp"
+            ):
+                response = await client.chat.completions.create(
+                    model="qwen/qwen3.6-27b",
+                    messages=messages,  # type: ignore[arg-type]
+                    tools=openai_tools,  # type: ignore[arg-type]
+                )
+            if response.usage is not None:
+                LLM_TOKENS.labels(model="qwen/qwen3.6-27b", tools_enabled="true").inc(
+                    response.usage.total_tokens
+                )
 
             choice = response.choices[0]
 

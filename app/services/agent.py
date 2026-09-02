@@ -1,21 +1,30 @@
 import json
+import logging
 
 from openai.types.chat.chat_completion_message_function_tool_call import (
     ChatCompletionMessageFunctionToolCall,
 )
 
 from app.services.llm import TOOL_MAP, TOOLS, client
+from app.services.metrics import LLM_TOKENS, measure_llm_call
+
+logger = logging.getLogger("app.services.agent")
 
 
 async def run_agent(question: str, max_steps: int = 5) -> str:
     messages: list[dict[str, object]] = [{"role": "user", "content": question}]
 
     for _step in range(max_steps):
-        response = await client.chat.completions.create(
-            model="qwen/qwen3.6-27b",
-            messages=messages,  # type: ignore[arg-type]
-            tools=TOOLS,
-        )
+        with measure_llm_call(model="qwen/qwen3.6-27b", tools_enabled=True, segment="agent_round"):
+            response = await client.chat.completions.create(
+                model="qwen/qwen3.6-27b",
+                messages=messages,  # type: ignore[arg-type]
+                tools=TOOLS,
+            )
+        if response.usage is not None:
+            LLM_TOKENS.labels(model="qwen/qwen3.6-27b", tools_enabled="true").inc(
+                response.usage.total_tokens
+            )
 
         choice = response.choices[0]
 

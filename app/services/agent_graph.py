@@ -1,5 +1,6 @@
 # pyright: reportUnknownMemberType=false, reportMissingTypeStubs=false
 import json
+import logging
 import operator
 from typing import Annotated, TypedDict, cast
 
@@ -9,6 +10,9 @@ from openai.types.chat.chat_completion_message_function_tool_call import (
 )
 
 from app.services.llm import TOOL_MAP, TOOLS, client
+from app.services.metrics import LLM_TOKENS, measure_llm_call
+
+logger = logging.getLogger("app.services.agent_graph")
 
 
 class AgentState(TypedDict):
@@ -16,11 +20,16 @@ class AgentState(TypedDict):
 
 
 async def call_llm(state: AgentState) -> dict[str, list[dict[str, object]]]:
-    response = await client.chat.completions.create(
-        model="qwen/qwen3.6-27b",
-        messages=state["messages"],  # type: ignore[arg-type]
-        tools=TOOLS,
-    )
+    with measure_llm_call(model="qwen/qwen3.6-27b", tools_enabled=True, segment="agent_graph"):
+        response = await client.chat.completions.create(
+            model="qwen/qwen3.6-27b",
+            messages=state["messages"],  # type: ignore[arg-type]
+            tools=TOOLS,
+        )
+    if response.usage is not None:
+        LLM_TOKENS.labels(model="qwen/qwen3.6-27b", tools_enabled="true").inc(
+            response.usage.total_tokens
+        )
 
     choice = response.choices[0]
     message = choice.message
