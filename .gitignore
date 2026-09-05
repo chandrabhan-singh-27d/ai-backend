@@ -3,3 +3,5 @@ __pycache__/
 .ruff_cache/
 .env
 qdrant_storage/
+logs/
+data/

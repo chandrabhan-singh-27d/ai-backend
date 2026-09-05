@@ -1,5 +1,7 @@
 import json
 import logging
+import os
+from logging.handlers import TimedRotatingFileHandler
 from typing import cast
 
 from app.services.context import get_request_context
@@ -37,6 +39,15 @@ class JSONFormatter(logging.Formatter):
 
 
 def setup_logging(level: int = logging.INFO) -> None:
-    handler = logging.StreamHandler()
-    handler.setFormatter(JSONFormatter())
-    logging.basicConfig(level=level, handlers=[handler], force=True)
+    os.makedirs("logs", exist_ok=True)
+
+    formatter = JSONFormatter()
+
+    stream_handler = logging.StreamHandler()
+    stream_handler.setFormatter(formatter)
+
+    file_handler = TimedRotatingFileHandler(
+        "logs/app.log", when="midnight", backupCount=7, encoding="utf-8"
+    )
+    file_handler.setFormatter(formatter)
+    logging.basicConfig(level=level, handlers=[stream_handler, file_handler], force=True)

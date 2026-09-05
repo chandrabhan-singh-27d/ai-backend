@@ -56,8 +56,8 @@
 | 14 | Agent Frameworks | ✅ | LangGraph, StateGraph, nodes/edges, reducers, recursion_limit |
 | 15 | Evaluation | ✅ | LLM-as-judge, rubric scoring (1–5), golden fixtures, retrieval vs faithfulness layers |
 | 16 | Observability (foundations) | ✅ | Structured JSON logging, request tracing via ContextVar, Prometheus metrics |
-| 17 | Qdrant Vector DB | ⬜ | Persistent vector store, Docker service, HNSW index, payload filtering |
-| 18 | Database Persistence | ⬜ | SQLite for app metadata, log persistence, data lifecycle |
+| 17 | Qdrant Vector DB | ✅ | Persistent vector store, Docker service, HNSW index, payload-as-metadata, deterministic point IDs |
+| 18 | Database Persistence | ✅ | SQLite metadata store (WAL, parameterized queries), JSON logs to disk with timed rotation, content-hash dedup, two-store delete symmetry |
 | 19 | OpenTelemetry Integration | ⬜ | OTel SDK, traces/spans, trace-aware metrics, log→trace correlation |
 | 20 | Observability Stack (Docker) | ⬜ | OTel Collector, Prometheus/Mimir, Grafana Loki, Grafana Tempo |
 | 21 | Monitoring Dashboards | ⬜ | Grafana dashboards, alerting rules, SLOs, log querying |
@@ -88,7 +88,7 @@ ai-backend/
 │   └── services/
 │       ├── llm.py                 # OpenAI client (Groq), tools, TOOLS, TOOL_MAP
 │       ├── embeddings.py          # sentence-transformers, cosine similarity
-│       ├── vector_store.py        # In-memory vector store (TypedDict)
+│       ├── vector_store.py        # Qdrant-backed VectorStore (add/search/delete/get/exists/count/list_all) + get_store()
 │       ├── tools.py               # Calculator tool (eval with whitelist)
 │       ├── rag.py                 # RAG pipeline (retrieve → augment → generate)
 │       ├── agent.py               # Direct tool-calling agent
@@ -139,7 +139,18 @@ ai-backend/
 | Prometheus `client` (not auto-instrument wizard) | Learn the exposition format + cardinality discipline; metrics only where they matter (LLM, HTTP) |
 | Route pattern (`scope["route"].path`) not concrete URL for `path` label | Avoids cardinality explosion from path parameters like `/documents/{id}` |
 | Qdrant over in-memory store | Persistence is non-negotiable in production; in-memory `store` dict lost on restart. Qdrant = production-proven HNSW ANN, payload filtering, Docker single-service ops |
+| Class-based `VectorStore` vs module-level dict | Option B won over module-level functions: client/collection/vector_size are instance state, not process globals → server, eval, and tests each hold isolated stores |
+| Deterministic `uuid5` point IDs | Same `doc_id` → same point ID → upsert overwrites → idempotent re-seeding. Keeps the eval suite deterministic with zero delete-then-insert machinery |
+| Business `doc_id` in payload, opaque UUID point ID | Qdrant point IDs must be unsigned int or UUID; the human key lives as payload metadata, returned by search so callers see the same ids as before |
 | SQLite for app metadata | Documents/vectors in Qdrant; relational metadata (users, keys, job status) in SQLite — one embedded file, zero infra |
+| Metadata row per document with `content_hash` | Qdrant holds vectors + payload; SQLite row carries the relational facts (title, source, hash, chunk_count, timestamps). sha256 fingerprint catches duplicate re-ingest of identical content |
+| Connection per SQLite method call | `sqlite3.Connection` is not thread-safe by default; uvicorn's thread pool must not share one. Open + close per op (the `with` context auto-commits) — negligible cost at our scale |
+| `one role per file` for stores | `vector_store.py` and `metadata_store.py` each own one store + its lazy singleton — mirrors the DB-per-service naming, keeps the two DBs unentangled |
+| Logs: `TimedRotatingFileHandler` over `RotatingFileHandler` | "What happened Tuesday at 3am" is a *time* question; midnight rotation gives one file per day (queryable), size rotation mixes arbitrary chunks of days |
+| Logs: `when="midnight"` rolls at local midnight; suffix = date | `app.log.2026-09-05`. `backupCount=7` = one week retention, stdlib-native (no cron job needed) |
+| Logs: console + file, same JSON formatter | One LogRecord → two handlers, identical shape. File is Loki-ingestable later; console keeps live debugging |
+| `INSERT OR REPLACE` in metadata store | Mirrors Qdrant upsert: idempotent re-ingest — same doc_id replaces the row, no delete-then-insert |
+| `title=request.title or request.id` | Empty-string title falls back to the doc id; NOT NULL holds, no conditional branch in the handler |
 | OTel SDK in-app + Collector on the side | App only emits OTLP (traces/metrics/logs); Collector handles batching, filtering, routing. Decouples instrumentation from backend choice |
 | Grafana unified frontend | Single pane for Prometheus (metrics), Loki (logs), Tempo (traces) — click from a latency spike → sample trace → correlated logs |
 
@@ -200,3 +211,18 @@ ai-backend/
 - Added application logging to `llm.py` (llm_call), `rag.py` (rag_retrieval), `chat.py` (error paths), `request_context.py` (request lifecycle)
 - Instrumented agent LLM calls (`agent.py`/`agent_graph.py`/`agent_mcp.py`) with `measure_llm_call` + token counters
 - Added `prometheus-client` dependency
+
+### Topic 17: Qdrant Vector DB
+- Created `app/services/vector_store.py` (VectorStore class + get_store lazy singleton)
+- Added `qdrant-client` dependency; ran Qdrant 1.19 in Docker (volume-mounted `qdrant_storage/`)
+- Rewired `documents.py`, `rag.py`, `llm.py`, `servers/documents.py`, `run_eval.py` off the module-level `store`
+- Eval gate green after migration: 5/5 retrieval, avg 4.60/5, min 4/5 (matches pre-migration baseline)
+- Fixed Groq OTPM 429: `max_tokens` + `reasoning_effort: "none"` + `reasoning_format: "hidden"` on chat() and judge
+
+### Topic 18: Database Persistence
+- Created `app/services/metadata_store.py` (MetadataStore + get_metadata_store lazy singleton, WAL, per-call connections)
+- `documents` table: doc_id PK, title, source, content_hash (sha256 fingerprint), chunk_count, created_at
+- `INSERT OR REPLACE` upsert mirrors Qdrant upsert → idempotent re-ingest
+- Updated `app/services/logging.py`: TimedRotatingFileHandler (midnight, backupCount=7) → `logs/app.log` JSON + console
+- Wired `app/routers/documents.py`: ingest records metadata (title fallback to id), GET /documents/metadata, delete purges both stores
+- Verified in-process round-trip: ingest→row+vector, fallback title, delete→both stores empty

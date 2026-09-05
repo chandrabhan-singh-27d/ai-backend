@@ -10,7 +10,7 @@ Building a production-grade AI backend incrementally with Python/FastAPI/Groq. P
 - Python 3.14, pyright strict mode, Ruff rules `["E", "F", "I", "UP", "B", "SIM", "RUF"]`, line-length 100
 - LLM: Groq (GROQ_API_KEY), no OpenAI/Anthropic keys
 
-## What's Built (Topics 1-16 ✅)
+## What's Built (Topics 1-18 ✅)
 
 ### Foundations
 1. **Project structure** — flat layout, `app/` package, pyproject.toml
@@ -52,18 +52,35 @@ Building a production-grade AI backend incrementally with Python/FastAPI/Groq. P
     - **Monitoring**: `prometheus-client` in `app/services/metrics.py` + `/metrics` route; `llm_latency_seconds` Histogram (labels model/tools_enabled/segment: tool_round/final/agent_round/agent_graph/agent_mcp), `llm_tokens_total` Counter, `http_requests_total` Counter + `http_request_duration_seconds` Histogram (labels method/path/status; path uses `scope["route"].path` to avoid cardinality explosion; `/metrics` excluded)
     - `measure_llm_call()` context manager wraps every LLM call (plain chat + all three agents) for timing + token counting
 
+### Persistence Phase (Topics 17-18 ✅)
+17. **Qdrant Vector DB** — `app/services/vector_store.py` rewritten as Qdrant-backed `VectorStore` class:
+    - Instance state = client/collection/vector_size; idempotent `create_collection(Distance.COSINE)` on init
+    - Deterministic point ID `str(uuid.uuid5(uuid.NAMESPACE_DNS, doc_id))` → upsert overwrites → idempotent re-seed; business `doc_id` kept in payload
+    - Methods mirror old interface: add/search/delete/get/exists/count/list_all; `get_store()` lazy singleton (localhost:6333, 384-dim)
+    - Rewired callers: documents router, rag.py (`store` param on answer_question), llm.py tools, MCP documents server, run_eval (isolated in-memory `EVAL_STORE`)
+    - Docker: `qdrant/qdrant` 1.19, ports 6333/6334, volume `qdrant_storage/` (gitignored)
+    - Eval gate green: 5/5 retrieval, avg 4.60/5, min 4/5
+    - Groq OTPM 429 fix: explicit `max_tokens` + `extra_body={"reasoning_format": "hidden", "reasoning_effort": "none"}` on all chat() calls + judge → completion ~14 tokens vs ~290
+18. **Database Persistence** — `app/services/metadata_store.py` SQLite store + durable JSON logs:
+    - `MetadataStore(db_path="data/app.db")`: `documents` table (doc_id PK, title, source, content_hash, chunk_count, created_at); WAL via PRAGMA; `row_factory=sqlite3.Row`; per-call connections (thread-safety, auto-commit via `with`)
+    - `INSERT OR REPLACE` upsert = idempotent re-ingest; `?` parameterized queries everywhere
+    - `logging.py`: `TimedRotatingFileHandler("logs/app.log", when="midnight", backupCount=7, encoding="utf-8")` + console, same JSONFormatter
+    - Documents router: ingest records metadata (title fallback `request.title or request.id`, sha256 content_hash, chunk_count=1), `GET /documents/metadata`, delete purges both stores
+    - Verified in-process round-trip; Qdrant + SQLite both empty after delete
+
 ### Key Files
 - `app/main.py` — mounts 6 routers (health, models, demo, chat, embeddings, documents, rag)
 - `app/services/llm.py` — AsyncOpenAI + Groq, TOOLS (ChatCompletionToolParam), TOOL_MAP, chat() with tools_enabled; qwen reasoning hidden via `reasoning_format` extra_body + `_strip_reasoning` fallback
 - `app/services/embeddings.py` — SentenceTransformer, embed(), cosine_similarity()
-- `app/services/vector_store.py` — store dict, Document/ScoredDocument TypedDicts, add/search/delete
+- `app/services/vector_store.py` — Qdrant-backed VectorStore + get_store() lazy singleton
+- `app/services/metadata_store.py` — SQLite MetadataStore + get_metadata_store() lazy singleton (WAL, per-call connections)
 - `app/services/tools.py` — calculate() with eval whitelist
-- `app/services/rag.py` — build_prompt(), answer_question()
+- `app/services/rag.py` — build_prompt(), answer_question(question, store=None)
 - `app/services/agent.py` — run_agent() with tool loop
 - `app/services/agent_graph.py` — LangGraph agent (AgentState, call_llm, run_tools, route_after_llm, graph, run_agent_graph)
 - `app/services/agent_mcp.py` — run_mcp_agent() connecting to MCP server
 - `app/services/context.py` — RequestContext dataclass, ContextVar, token-based set/reset
-- `app/services/logging.py` — JSONFormatter (request-scoped fields) + setup_logging
+- `app/services/logging.py` — JSONFormatter (request-scoped fields) + setup_logging (console + TimedRotatingFileHandler to logs/)
 - `app/services/metrics.py` — Prometheus metrics (LLM latency/tokens, HTTP count/duration) + measure_llm_call
 - `app/middlewares/request_context.py` — request_id/client_id middleware + HTTP metrics
 - `app/routers/metrics.py` — GET /metrics scrape endpoint
@@ -74,7 +91,7 @@ Building a production-grade AI backend incrementally with Python/FastAPI/Groq. P
 - `tools/corpus.json` — seed documents so the eval suite is self-contained
 - `tools/run_eval.py` — eval harness (seed → retrieval check → generate → judge → report → exit code)
 - `app/routers/chat.py` — /chat, /chat/tools, /agent, /agent/mcp, /agent/graph
-- `app/services/vector_store.py` — PLANNED: Qdrant-backed reimplementation of `add`/`search`/`delete`
+- `app/routers/documents.py` — /documents, /search, /documents/metadata, /documents/{id}
 - `docker-compose.yml` — PLANNED: Qdrant, OTel Collector, Prometheus, Loki, Tempo, Grafana
 - `config/otel-collector/`, `config/prometheus/`, `config/grafana/`, `config/loki/`, `config/tempo/` — PLANNED
 
@@ -92,6 +109,11 @@ Building a production-grade AI backend incrementally with Python/FastAPI/Groq. P
 - Eval judge: separate AsyncOpenAI client with temperature=0 — eval knobs never leak into prod `chat()`
 - Extraction-based JSON parsing beats strict `response_format=json_object` on reasoning models (CoT leaks break strict mode); never put `<placeholder>` pseudo-syntax in prompts demanding pure JSON — show a concrete filled example
 - Layered grading localizes failures: retrieval miss = embedding/search problem; unsupported answer = generation problem
+- SQLite `(x,)` tuple discipline: a 1-tuple needs a comma, `(x)` is just a grouped value — sqlite3 iterates a bare str into N bindings
+- Two stores, no transaction: Qdrant + SQLite hold related data and are synced only by caller order (ingest both / delete both) — the canonical no-database double-write consistency smell, flagged for the journaling/DB phase
+- Logs: `TimedRotatingFileHandler` (when=midnight, backupCount=7) chosen over `RotatingFileHandler` — "what happened Tuesday at 3am?" is a time question; one file/day beats size partitions
+- Logs: console + file share one JSONFormatter — identical shape, Loki-ingestable later
+- `hashlib` sha256 fingerprint of content in SQLite row — duplicates guard for re-ingest without byte-compare of full text
 
 ## Teaching Rules
 1. No dumping solutions — hints first, increase progressively
@@ -103,9 +125,7 @@ Building a production-grade AI backend incrementally with Python/FastAPI/Groq. P
 7. Never edit files without asking — tell user what to edit
 
 ## Next Topics
-17. **Qdrant Vector DB** — NEXT: swap in-memory `store` dict for Qdrant-in-Docker behind the existing `add`/`search`/`delete` interface; HNSW index; payload filtering; eval suite as regression safety net
-18. Database Persistence — SQLite for app metadata (users, keys, jobs); log persistence; data lifecycle
-19. OpenTelemetry Integration — OTel Python SDK, traces/spans on LLM + HTTP calls, trace-aware metrics, log→trace correlation via `trace_id`
+19. **OpenTelemetry Integration** — NEXT: OTel Python SDK, traces/spans on LLM + HTTP calls, trace-aware metrics, log→trace correlation via `trace_id`
 20. Observability Stack (Docker) — OTel Collector, Prometheus/Mimir, Grafana Loki, Grafana Tempo in one docker-compose
 21. Monitoring Dashboards — Grafana datasources + dashboards, alert rules, SLOs, Loki log querying
 22. Auth & API Keys
@@ -131,6 +151,6 @@ Building a production-grade AI backend incrementally with Python/FastAPI/Groq. P
 - Test agents side-by-side with: `PYTHONPATH=. uv run python tools/test_agent_graph.py`
 - Run eval suite with: `PYTHONPATH=. uv run python tools/run_eval.py` (exit 1 = suite FAIL; currently PASS, avg 4.60/5)
 - Document ingestion needed before RAG/agent tests work
-- Inspect structured logs in the server stdout (JSON lines); `request_id` correlates a request's journey
+- Inspect structured logs in the server stdout (JSON lines) and `logs/app.log` (timed rotation, one file/day, 7-day retention); `request_id` correlates a request's journey
 - Prometheus metrics at `/metrics` for LLM latency/tokens (segments: tool_round/final/agent_round/agent_graph/agent_mcp) and HTTP count/duration (path label uses route pattern, `/metrics` excluded)
 - The `suppress(BrokenPipeError)` in servers/documents.py may need attention — was replaced with `suppress(BaseExceptionGroup)` then removed when switching to `anyio.run()`
