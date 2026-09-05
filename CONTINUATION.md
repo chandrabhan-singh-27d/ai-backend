@@ -74,6 +74,9 @@ Building a production-grade AI backend incrementally with Python/FastAPI/Groq. P
 - `tools/corpus.json` — seed documents so the eval suite is self-contained
 - `tools/run_eval.py` — eval harness (seed → retrieval check → generate → judge → report → exit code)
 - `app/routers/chat.py` — /chat, /chat/tools, /agent, /agent/mcp, /agent/graph
+- `app/services/vector_store.py` — PLANNED: Qdrant-backed reimplementation of `add`/`search`/`delete`
+- `docker-compose.yml` — PLANNED: Qdrant, OTel Collector, Prometheus, Loki, Tempo, Grafana
+- `config/otel-collector/`, `config/prometheus/`, `config/grafana/`, `config/loki/`, `config/tempo/` — PLANNED
 
 ### Key Design Decisions
 - Pydantic for API validation, TypedDict for internal types
@@ -100,13 +103,16 @@ Building a production-grade AI backend incrementally with Python/FastAPI/Groq. P
 7. Never edit files without asking — tell user what to edit
 
 ## Next Topics
-17. **Auth & API Keys** — NEXT
-18. Background jobs
-19. Deployment
-20. Production architecture
-21. Capstone project
-
-**Planned interlude before/with 19:** swap in-memory vector store for Qdrant-in-Docker behind the existing `add`/`search`/`delete` interface, using the eval suite as the regression safety net (user decision).
+17. **Qdrant Vector DB** — NEXT: swap in-memory `store` dict for Qdrant-in-Docker behind the existing `add`/`search`/`delete` interface; HNSW index; payload filtering; eval suite as regression safety net
+18. Database Persistence — SQLite for app metadata (users, keys, jobs); log persistence; data lifecycle
+19. OpenTelemetry Integration — OTel Python SDK, traces/spans on LLM + HTTP calls, trace-aware metrics, log→trace correlation via `trace_id`
+20. Observability Stack (Docker) — OTel Collector, Prometheus/Mimir, Grafana Loki, Grafana Tempo in one docker-compose
+21. Monitoring Dashboards — Grafana datasources + dashboards, alert rules, SLOs, Loki log querying
+22. Auth & API Keys
+23. Background jobs
+24. Deployment
+25. Production architecture
+26. Capstone project
 
 ## New Machine Setup Notes (WSL Ubuntu 24)
 - Python 3.14 IS stable (released Oct 2025); if tooling calls it pre-release, metadata is stale or an RC got cached — `uv python install 3.14`

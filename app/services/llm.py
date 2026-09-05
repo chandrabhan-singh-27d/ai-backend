@@ -11,7 +11,7 @@ from openai.types.chat.chat_completion_message_function_tool_call import (
 from app.services.embeddings import embed
 from app.services.metrics import LLM_TOKENS, measure_llm_call
 from app.services.tools import calculate
-from app.services.vector_store import search, store
+from app.services.vector_store import get_store
 
 logger = logging.getLogger("app.services.llm")
 
@@ -46,7 +46,8 @@ async def chat(message: str, tools_enabled: bool = False) -> str:
                 model="qwen/qwen3.6-27b",
                 messages=[{"role": "user", "content": message}],
                 tools=TOOLS,
-                extra_body={"reasoning_format": "hidden"},
+                max_tokens=400,
+                extra_body={"reasoning_format": "hidden", "reasoning_effort": "none"},
             )
         if response.usage is not None:
             LLM_TOKENS.labels(model="qwen/qwen3.6-27b", tools_enabled="true").inc(
@@ -58,7 +59,8 @@ async def chat(message: str, tools_enabled: bool = False) -> str:
             response = await client.chat.completions.create(
                 model="qwen/qwen3.6-27b",
                 messages=[{"role": "user", "content": message}],
-                extra_body={"reasoning_format": "hidden"},
+                max_tokens=400,
+                extra_body={"reasoning_format": "hidden", "reasoning_effort": "none"},
             )
         if response.usage is not None:
             LLM_TOKENS.labels(model="qwen/qwen3.6-27b", tools_enabled="false").inc(
@@ -94,7 +96,8 @@ async def chat(message: str, tools_enabled: bool = False) -> str:
             final = await client.chat.completions.create(
                 model="qwen/qwen3.6-27b",
                 messages=messages,  # type: ignore[arg-type]
-                extra_body={"reasoning_format": "hidden"},
+                max_tokens=400,
+                extra_body={"reasoning_format": "hidden", "reasoning_effort": "none"},
             )
         if final.usage is not None:
             LLM_TOKENS.labels(model="qwen/qwen3.6-27b", tools_enabled="true").inc(
@@ -107,16 +110,17 @@ async def chat(message: str, tools_enabled: bool = False) -> str:
 
 def _search_documents(query: str, top_k: int = 3) -> str:
     query_embedding = embed([query])[0]
-    results = search(query_embedding, top_k=top_k)
+    results = get_store().search(query_embedding, top_k=top_k)
     if not results:
         return "No results."
     return "\n".join(f"- [{r['id']}] {r['text']} (score: {r['score']:.3f})" for r in results)
 
 
 def _list_documents() -> str:
-    if not store:
+    docs = get_store().list_all()
+    if not docs:
         return "No documents stored."
-    return "\n".join(f"- [{doc_id}] {doc['text'][:80]}" for doc_id, doc in store.items())
+    return "\n".join(f"- [{doc['id']}] {doc['text'][:80]}" for doc in docs)
 
 
 TOOLS: list[ChatCompletionToolParam] = [

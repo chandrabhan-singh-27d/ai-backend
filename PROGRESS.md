@@ -55,12 +55,17 @@
 |---|---|---|---|
 | 14 | Agent Frameworks | ✅ | LangGraph, StateGraph, nodes/edges, reducers, recursion_limit |
 | 15 | Evaluation | ✅ | LLM-as-judge, rubric scoring (1–5), golden fixtures, retrieval vs faithfulness layers |
-| 16 | Observability | ✅ | Structured JSON logging, request tracing via ContextVar, Prometheus metrics |
-| 17 | Auth & API Keys | ⬜ | Authentication, rate limiting, API key management |
-| 18 | Background jobs | ⬜ | Task queues, async processing |
-| 19 | Deployment | ⬜ | Docker, CI/CD, hosting |
-| 20 | Production architecture | ⬜ | Scalability, reliability, cost optimization |
-| 21 | Capstone project | ⬜ | Full-stack AI application |
+| 16 | Observability (foundations) | ✅ | Structured JSON logging, request tracing via ContextVar, Prometheus metrics |
+| 17 | Qdrant Vector DB | ⬜ | Persistent vector store, Docker service, HNSW index, payload filtering |
+| 18 | Database Persistence | ⬜ | SQLite for app metadata, log persistence, data lifecycle |
+| 19 | OpenTelemetry Integration | ⬜ | OTel SDK, traces/spans, trace-aware metrics, log→trace correlation |
+| 20 | Observability Stack (Docker) | ⬜ | OTel Collector, Prometheus/Mimir, Grafana Loki, Grafana Tempo |
+| 21 | Monitoring Dashboards | ⬜ | Grafana dashboards, alerting rules, SLOs, log querying |
+| 22 | Auth & API Keys | ⬜ | Authentication, rate limiting, API key management |
+| 23 | Background jobs | ⬜ | Task queues, async processing |
+| 24 | Deployment | ⬜ | Docker, CI/CD, hosting |
+| 25 | Production architecture | ⬜ | Scalability, reliability, cost optimization |
+| 26 | Capstone project | ⬜ | Full-stack AI application |
 
 ---
 
@@ -103,6 +108,13 @@ ai-backend/
 ├── pyproject.toml                 # Project config, deps, ruff, pyright
 ├── .env                           # GROQ_API_KEY (gitignored)
 ├── .gitignore
+├── docker-compose.yml             # Planned: Qdrant, OTel Collector, Prometheus, Loki, Tempo, Grafana
+├── config/
+│   └── otel-collector/            # Planned: OTel Collector config
+│   └── prometheus/                # Planned: prometheus.yml + alert rules
+│   └── grafana/                   # Planned: datasources + dashboards
+│   └── loki/                      # Planned: Loki config
+│   └── tempo/                     # Planned: Tempo config
 └── uv.lock
 ```
 
@@ -126,6 +138,10 @@ ai-backend/
 | JSON formatter reading the same ContextVar | Every log line auto-carries `request_id`/`client_id` regardless of logger or call depth |
 | Prometheus `client` (not auto-instrument wizard) | Learn the exposition format + cardinality discipline; metrics only where they matter (LLM, HTTP) |
 | Route pattern (`scope["route"].path`) not concrete URL for `path` label | Avoids cardinality explosion from path parameters like `/documents/{id}` |
+| Qdrant over in-memory store | Persistence is non-negotiable in production; in-memory `store` dict lost on restart. Qdrant = production-proven HNSW ANN, payload filtering, Docker single-service ops |
+| SQLite for app metadata | Documents/vectors in Qdrant; relational metadata (users, keys, job status) in SQLite — one embedded file, zero infra |
+| OTel SDK in-app + Collector on the side | App only emits OTLP (traces/metrics/logs); Collector handles batching, filtering, routing. Decouples instrumentation from backend choice |
+| Grafana unified frontend | Single pane for Prometheus (metrics), Loki (logs), Tempo (traces) — click from a latency spike → sample trace → correlated logs |
 
 ---
 

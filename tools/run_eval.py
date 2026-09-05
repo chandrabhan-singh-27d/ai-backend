@@ -9,10 +9,17 @@ from typing import TypedDict, cast
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
 from pydantic import BaseModel, Field
+from qdrant_client import QdrantClient
 
 from app.services.embeddings import embed
 from app.services.rag import answer_question
-from app.services.vector_store import add, search
+from app.services.vector_store import VectorStore
+
+EVAL_STORE = VectorStore(
+    client=QdrantClient(path=":memory:"),
+    collection="eval_documents",
+    vector_size=384,
+)
 
 load_dotenv()
 
@@ -55,7 +62,7 @@ def seed_store() -> None:
     corpus: list[CorpusDoc] = json.loads((TOOLS_DIR / "corpus.json").read_text())
     embeddings = embed([doc["text"] for doc in corpus])
     for doc, emb in zip(corpus, embeddings, strict=True):
-        add(doc_id=doc["id"], text=doc["text"], embedding=emb)
+        EVAL_STORE.add(doc_id=doc["id"], text=doc["text"], embedding=emb)
 
 
 def parse_verdict(content: str) -> JudgeVerdict:
@@ -110,9 +117,9 @@ async def judge_answer(
         f"CONTEXT:\n{context}\n\n"
         f"QUESTION: {question}\n\n"
         f"ANSWER: {answer}\n\n"
-        "You may reason step by step first, but your reply must END with a "
-        'single JSON object (not an array) with key "score" (an integer from 1 '
-        'to 5) and key "reasoning" (one short sentence). '
+        "Do NOT reason step by step. Reply with ONLY a single JSON object "
+        '(not an array) with key "score" (an integer from 1 to 5) and key '
+        '"reasoning" (one short sentence). '
         'Example: {"score": 4, "reasoning": "Supported by context but omitted one detail."}'
     )
 
@@ -120,6 +127,8 @@ async def judge_answer(
         model=JUDGE_MODEL,
         messages=[{"role": "user", "content": prompt}],
         temperature=0,
+        max_tokens=150,
+        extra_body={"reasoning_format": "hidden", "reasoning_effort": "none"},
     )
     content = response.choices[0].message.content or "{}"
     return parse_verdict(content)
@@ -127,7 +136,7 @@ async def judge_answer(
 
 async def run_case(case: EvalCase) -> CaseResult:
     query_embedding = embed([case["question"]])[0]
-    retrieved = search(query_embedding, top_k=3)
+    retrieved = EVAL_STORE.search(query_embedding, top_k=3)
     retrieved_ids = [r["id"] for r in retrieved]
 
     retrieval_pass = all(
@@ -135,7 +144,7 @@ async def run_case(case: EvalCase) -> CaseResult:
     )
 
     context = "\n\n".join(r["text"] for r in retrieved)
-    answer = await answer_question(case["question"])
+    answer = await answer_question(case["question"], store=EVAL_STORE)
     verdict = await judge_answer(case["question"], context, case, answer)
 
     return CaseResult(

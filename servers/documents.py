@@ -3,7 +3,7 @@ from mcp import types
 from mcp.server import Server, ServerRequestContext
 from mcp.server.stdio import stdio_server
 
-from app.services.vector_store import add, delete, search, store
+from app.services.vector_store import get_store
 
 TOOLS = [
     types.Tool(
@@ -89,7 +89,7 @@ async def handle_call_tool(
 
         query_embedding = embed([args["query"]])[0]
         top_k = args.get("top_k", 3)
-        results = search(query_embedding, top_k=top_k)
+        results = get_store().search(query_embedding, top_k=top_k)
         if not results:
             return _text("No results.")
         lines = [
@@ -99,17 +99,18 @@ async def handle_call_tool(
         return _text("\n".join(lines))
 
     if name == "get_document":
-        doc = store.get(args["doc_id"])
-        if not doc:
+        text = get_store().get(args["doc_id"])
+        if text is None:
             return _text(f"Document '{args['doc_id']}' not found.")
-        return _text(f"[{args['doc_id']}] {doc['text']}")
+        return _text(f"[{args['doc_id']}] {text}")
 
     if name == "list_documents":
-        if not store:
+        docs = get_store().list_all()
+        if not docs:
             return _text("No documents stored.")
         lines = [
-            f"- [{doc_id}] {doc['text'][:80]}"
-            for doc_id, doc in store.items()
+            f"- [{doc['id']}] {doc['text'][:80]}"
+            for doc in docs
         ]
         return _text("\n".join(lines))
 
@@ -117,16 +118,16 @@ async def handle_call_tool(
         from app.services.embeddings import embed
 
         embedding = embed([args["text"]])[0]
-        add(doc_id=args["doc_id"], text=args["text"], embedding=embedding)
+        get_store().add(doc_id=args["doc_id"], text=args["text"], embedding=embedding)
         return _text(f"Document '{args['doc_id']}' added.")
 
     if name == "delete_document":
-        if args["doc_id"] not in store:
+        if not get_store().exists(args["doc_id"]):
             return _text(
                 f"Document '{args['doc_id']}' not found.",
                 is_error=True,
             )
-        delete(args["doc_id"])
+        get_store().delete(args["doc_id"])
         return _text(f"Document '{args['doc_id']}' deleted.")
 
     return _text("Unknown tool.", is_error=True)
