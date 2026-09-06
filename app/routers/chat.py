@@ -1,19 +1,29 @@
+import json
 import logging
+from collections.abc import AsyncIterator
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from app.services.agent import run_agent
+from app.services.agent import run_agent, run_agent_stream
 from app.services.agent_graph import run_agent_graph
 from app.services.agent_mcp import run_mcp_agent
-from app.services.llm import chat
+from app.services.llm import chat, chat_stream
 
 router = APIRouter()
 logger = logging.getLogger("app.routers.chat")
 
 
+async def _frame(events: AsyncIterator[dict[str, object]]) -> AsyncIterator[str]:
+    async for event in events:
+        yield f"data: {json.dumps(event)}\n\n"
+
+
 class ChatRequest(BaseModel):
     message: str
+    stream: bool = False
+    max_tokens: int = 400
 
 
 class ChatResponse(BaseModel):
@@ -23,6 +33,8 @@ class ChatResponse(BaseModel):
 
 class ToolChatRequest(BaseModel):
     message: str
+    stream: bool = False
+    max_tokens: int = 400
 
 
 class ToolChatResponse(BaseModel):
@@ -32,6 +44,8 @@ class ToolChatResponse(BaseModel):
 
 class AgentRequest(BaseModel):
     question: str
+    stream: bool = False
+    max_tokens: int = 400
 
 
 class AgentResponse(BaseModel):
@@ -46,20 +60,32 @@ class MCPAgentResponse(BaseModel):
     answer: str
 
 
-@router.post("/chat")
-async def chat_endpoint(request: ChatRequest) -> ChatResponse:
+@router.post("/chat", response_model=ChatResponse)
+async def chat_endpoint(request: ChatRequest) -> ChatResponse | StreamingResponse:
+    if request.stream:
+        return StreamingResponse(
+            _frame(chat_stream(request.message, max_tokens=request.max_tokens)),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache"},
+        )
     try:
-        content = await chat(request.message)
+        content = await chat(request.message, max_tokens=request.max_tokens)
         return ChatResponse(response=content, model="qwen/qwen3.6-27b")
     except Exception as e:
         logger.exception("chat_endpoint_failed")
         raise HTTPException(status_code=502, detail=str(e)) from e
 
 
-@router.post("/chat/tools")
-async def tool_chat_endpoint(request: ToolChatRequest) -> ToolChatResponse:
+@router.post("/chat/tools", response_model=ToolChatResponse)
+async def tool_chat_endpoint(request: ToolChatRequest) -> ToolChatResponse | StreamingResponse:
+    if request.stream:
+        return StreamingResponse(
+            _frame(chat_stream(request.message, tools_enabled=True, max_tokens=request.max_tokens)),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache"},
+        )
     try:
-        content = await chat(request.message, tools_enabled=True)
+        content = await chat(request.message, tools_enabled=True, max_tokens=request.max_tokens)
         return ToolChatResponse(response=content, tool_used=True)
     except Exception as e:
         logger.exception("tool_chat_endpoint_failed")
@@ -67,7 +93,13 @@ async def tool_chat_endpoint(request: ToolChatRequest) -> ToolChatResponse:
 
 
 @router.post("/agent", response_model=AgentResponse)
-async def agent_endpoint(request: AgentRequest) -> AgentResponse:
+async def agent_endpoint(request: AgentRequest) -> AgentResponse | StreamingResponse:
+    if request.stream:
+        return StreamingResponse(
+            _frame(run_agent_stream(request.question, max_tokens=request.max_tokens)),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache"},
+        )
     answer = await run_agent(request.question)
     return AgentResponse(answer=answer)
 

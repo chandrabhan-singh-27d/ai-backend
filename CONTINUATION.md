@@ -86,6 +86,14 @@ Building a production-grade AI backend incrementally with Python/FastAPI/Groq. P
     - Recording rules `config/prometheus/rules.yml`: `ai_backend:error_ratio:5m`, `ai_backend:success_ratio:5m`
     - `config/grafana/provisioning/dashboards/rag-overview.json`: ER-triage layout — Vitals (error-ratio stat, req/s, p95 HTTP w/ 15s threshold) → Diagnostics (LLM p95 overall + by segment, token rate) → Deep-dive (4xx/5xx, Loki error logs `{job="ai-backend"} | json | level = "error"`)
     - Grafana alert rules (provisioned in `config/grafana/provisioning/alerting/rules.yml`): high error burn (>0.06 ratio → page), slow LLM (p95 > 15s → warning); alerts evaluate the recording rule / p95 query
+22. **Streaming SSE + TTFT**:
+    - Opt-in `stream: bool = False` on `/chat`, `/chat/tools`, `/agent` request models; when true → `text/event-stream` (SSE `data: {…}\n\n` frames via FastAPI `StreamingResponse` + `_frame` helper in `app/routers/chat.py`)
+    - Event contract: `{"type": "token", "content"}` | `{"type": "tool_call", "name"}` | `{"type": "done"}`; non-stream paths untouched
+    - `chat_stream()` in `app/services/llm.py` (tool loop + final pass), `run_agent_stream()` in `app/services/agent.py` (multi-round); `iter_chunks()` + `log_llm_usage()` shared helpers
+    - Configurable response length: `max_tokens: int = 400` on chat(), chat_stream(), run_agent(), run_agent_stream(), threaded from request `max_tokens` field
+    - TTFT: `llm_time_to_first_token_seconds` Histogram (LLM_TTFT, labels model/segment) recorded at first content token in streaming paths
+    - `tools/stream_test.py`: in-process ASGITransport SSE test, verified against real Groq
+    - **pyright root-cause fix**: tools-path streaming errors came from `messages: list[dict[str, object]]` breaking SDK overload resolution (→ Unknown return). Fix = type `messages: list[ChatCompletionMessageParam]` from `openai.types.chat` — removed all `# type: ignore[arg-type]`, no pragmas/casts
 
 ### Key Files
 - `app/main.py` — mounts 6 routers (health, models, demo, chat, embeddings, documents, rag)
@@ -110,7 +118,8 @@ Building a production-grade AI backend incrementally with Python/FastAPI/Groq. P
 - `tools/eval_cases.json` — golden eval cases (questions, expected_doc_ids, expected_facts, answerable flag)
 - `tools/corpus.json` — seed documents so the eval suite is self-contained
 - `tools/run_eval.py` — eval harness (seed → retrieval check → generate → judge → report → exit code)
-- `app/routers/chat.py` — /chat, /chat/tools, /agent, /agent/mcp, /agent/graph
+- `app/routers/chat.py` — /chat, /chat/tools, /agent, /agent/mcp, /agent/graph (all three main endpoints support opt-in SSE streaming + max_tokens)
+- `tools/stream_test.py` — in-process SSE stream test (/chat, /chat/tools, /agent)
 - `app/routers/documents.py` — /documents, /search, /documents/metadata, /documents/{id}
 - `docker-compose.yml` — INITIAL (not yet run): Qdrant, OTel Collector, Prometheus, Loki, Tempo, Grafana
 - `config/otel-collector/`, `config/prometheus/` (incl. rules.yml), `config/grafana/` (datasources, dashboards/, alerting/), `config/loki/`, `config/tempo/`, `config/promtail/` — INITIAL (not yet run)
@@ -151,11 +160,12 @@ Building a production-grade AI backend incrementally with Python/FastAPI/Groq. P
 ## Next Topics
 20. **Observability Stack (Docker)** — DONE — config written, bootstrap run deferred to final assembly
 21. **Monitoring Dashboards** — DONE — SLOs, triage dashboard, alert rules provisioned (config only)
-22. **Auth & API Keys** — NEXT
-23. Background jobs
-24. Deployment
-25. Production architecture
-26. Capstone project
+22. **Streaming SSE** — DONE — opt-in SSE, configurable max_tokens, TTFT metric
+23. **Auth & API Keys** — NEXT
+24. Background jobs
+25. Deployment
+26. Production architecture
+27. Capstone project
 
 ## New Machine Setup Notes (WSL Ubuntu 24)
 - Python 3.14 IS stable (released Oct 2025); if tooling calls it pre-release, metadata is stale or an RC got cached — `uv python install 3.14`
@@ -172,6 +182,7 @@ Building a production-grade AI backend incrementally with Python/FastAPI/Groq. P
 - Server runs on localhost:8000
 - Test MCP with: `PYTHONPATH=. uv run python tools/mcp_client.py documents`
 - Test agents side-by-side with: `PYTHONPATH=. uv run python tools/test_agent_graph.py`
+- Test SSE streaming with: `PYTHONPATH=. uv run python tools/stream_test.py`
 - Run eval suite with: `PYTHONPATH=. uv run python tools/run_eval.py` (exit 1 = suite FAIL; currently PASS, avg 4.60/5)
 - Document ingestion needed before RAG/agent tests work
 - Inspect structured logs in the server stdout (JSON lines) and `logs/app.log` (timed rotation, one file/day, 7-day retention); `request_id` correlates a request's journey

@@ -11,6 +11,12 @@ LLM_LATENCY = Histogram(
     labelnames=["model", "tools_enabled", "segment"],
 )
 
+LLM_TTFT = Histogram(
+    "llm_time_to_first_token_seconds",
+    "Time from LLM API call start to first content token",
+    labelnames=["model", "segment"],
+)
+
 LLM_TOKENS = Counter(
     "llm_tokens_total", "Total tokens processed by LLM Calls", labelnames=["model", "tools_enabled"]
 )
@@ -21,8 +27,10 @@ HTTP_REQUESTS = Counter(
 
 HTTP_REQUEST_DURATION = Histogram(
     "http_request_duration_seconds",
-    "HTTP request duration in seconds", labelnames=["method", "path"]
+    "HTTP request duration in seconds",
+    labelnames=["method", "path"],
 )
+
 
 @contextmanager
 def measure_llm_call(model: str, tools_enabled: bool, segment: str):

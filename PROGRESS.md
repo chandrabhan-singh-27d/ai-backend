@@ -60,8 +60,9 @@
 | 18 | Database Persistence | ✅ | SQLite metadata store (WAL, parameterized queries), JSON logs to disk with timed rotation, content-hash dedup, two-store delete symmetry |
 | 19 | OpenTelemetry Integration | ✅ | OTel SDK, spans on LLM/HTTP, trace-aware metrics, log→trace correlation |
 | 20 | Observability Stack (Docker) | ⬜ | OTel Collector, Prometheus/Mimir, Grafana Loki, Grafana Tempo |
-| 21 | Monitoring Dashboards | ⬜ | Grafana dashboards, alerting rules, SLOs, log querying |
-| 22 | Auth & API Keys | ⬜ | Authentication, rate limiting, API key management |
+| 21 | Monitoring Dashboards | ✅ | Grafana dashboards, alerting rules, SLOs, log querying |
+| 22 | Streaming SSE | ✅ | Server-Sent Events, token/tool/done frames, TTFT, configurable max_tokens |
+| 23 | Auth & API Keys | ⬜ | Authentication, rate limiting, API key management |
 | 23 | Background jobs | ⬜ | Task queues, async processing |
 | 24 | Deployment | ⬜ | Docker, CI/CD, hosting |
 | 25 | Production architecture | ⬜ | Scalability, reliability, cost optimization |
@@ -261,3 +262,14 @@ ai-backend/
   - Deep-dive: 4xx/5xx rates, Loki error-log panel `{job="ai-backend"} | json | level = "error"`
 - Grafana alert rules (provisioned, evaluate the recording rule + p95 query): high error burn (>0.06 ratio for 5m, severity page) and slow LLM (p95 > 15s for 5m, severity warning) — alert on SLO burn, not raw metrics
 - All config/JSON/YAML parse-validated; live rendering deferred to final assembly
+
+### Topic 22: Streaming SSE + TTFT
+- Opt-in streaming (`stream: bool = False`) on `/chat` (ChatRequest), `/chat/tools` (ToolChatRequest), `/agent` (AgentRequest); non-stream paths untouched
+- `text/event-stream` response via FastAPI `StreamingResponse`; `_frame` helper wraps events as SSE `data: {…}\n\n`
+- Event types: `{"type": "token", "content"}` (streamed text), `{"type": "tool_call", "name"}` (agent chose a tool), `{"type": "done"}` (terminator)
+- `app/services/llm.py`: `chat_stream()` async generator (tool loop + final pass); `iter_chunks()` helper; `log_llm_usage()` shared logging helper
+- `app/services/agent.py`: `run_agent_stream()` async generator (multi-round tool loop yielding tokens + tool_calls + done)
+- `tools/stream_test.py`: in-process httpx ASGITransport test hitting all 3 endpoints with `stream: true`; verified against real Groq (token/tool/done frames emitted)
+- **Configurable tokens**: `max_tokens: int = 400` added to chat(), chat_stream(), run_agent(), run_agent_stream() and threaded from request models (`max_tokens` field on each request). Lets tuning raise/lower caps per endpoint without code edits
+- **TTFT metric**: `llm_time_to_first_token_seconds` Histogram (`LLM_TTFT`) in metrics.py, labels `model`/`segment`; recorded at first content token in all streaming paths (chat_stream final, agent rounds)
+- **Root-cause fix**: the 4 pyright errors on tools-path streaming were caused by `messages` annotated as `list[dict[str, object]]` → SDK overload resolution failed → `create()` returned `Unknown`. Fixed by typing `messages: list[ChatCompletionMessageParam]` (import from `openai.types.chat`) — no `# type: ignore`, no pragmas, no casts
