@@ -4,6 +4,8 @@ import os
 from logging.handlers import TimedRotatingFileHandler
 from typing import cast
 
+from opentelemetry import trace
+
 from app.services.context import get_request_context
 
 
@@ -27,6 +29,12 @@ class JSONFormatter(logging.Formatter):
             "request_id": request_id,
             "client_id": client_id,
         }
+
+        span = trace.get_current_span()
+        span_context = span.get_span_context()
+        if span_context.is_valid:
+            payload["trace_id"] = format(span_context.trace_id, "032x")
+            payload["span_id"] = format(span_context.span_id, "016x")
 
         if record.exc_info:
             payload["exc_info"] = self.formatException(record.exc_info)

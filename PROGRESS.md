@@ -58,7 +58,7 @@
 | 16 | Observability (foundations) | ✅ | Structured JSON logging, request tracing via ContextVar, Prometheus metrics |
 | 17 | Qdrant Vector DB | ✅ | Persistent vector store, Docker service, HNSW index, payload-as-metadata, deterministic point IDs |
 | 18 | Database Persistence | ✅ | SQLite metadata store (WAL, parameterized queries), JSON logs to disk with timed rotation, content-hash dedup, two-store delete symmetry |
-| 19 | OpenTelemetry Integration | ⬜ | OTel SDK, traces/spans, trace-aware metrics, log→trace correlation |
+| 19 | OpenTelemetry Integration | ✅ | OTel SDK, spans on LLM/HTTP, trace-aware metrics, log→trace correlation |
 | 20 | Observability Stack (Docker) | ⬜ | OTel Collector, Prometheus/Mimir, Grafana Loki, Grafana Tempo |
 | 21 | Monitoring Dashboards | ⬜ | Grafana dashboards, alerting rules, SLOs, log querying |
 | 22 | Auth & API Keys | ⬜ | Authentication, rate limiting, API key management |
@@ -144,6 +144,12 @@ ai-backend/
 | Business `doc_id` in payload, opaque UUID point ID | Qdrant point IDs must be unsigned int or UUID; the human key lives as payload metadata, returned by search so callers see the same ids as before |
 | SQLite for app metadata | Documents/vectors in Qdrant; relational metadata (users, keys, job status) in SQLite — one embedded file, zero infra |
 | Metadata row per document with `content_hash` | Qdrant holds vectors + payload; SQLite row carries the relational facts (title, source, hash, chunk_count, timestamps). sha256 fingerprint catches duplicate re-ingest of identical content |
+| `get_tracer()` returns a fresh tracer per call | A Tracer is welded to the provider global *at mint time*; import-time `get_tracer()` before `setup_tracing()` locks it to the NoOp provider forever. Function-style re-resolves the live provider |
+| `# pyright: reportMissingTypeStubs=false` file-scoped for OTel instrumentation | Same pattern as langgraph in agent_graph.py — suppress only the missing-stub noise at the file edge, never repo-wide |
+| Span per LLM call lives in `measure_llm_call` (metrics.py) | One chokepoint, every LLM call (rag + agents + judge) traced with `llm_call.{segment}`; metrics + span measured from the same window in the same place |
+| trace_id/span_id in JSON logs only when the span is valid | No zero-filled noise for non-request contexts (startup, background); only in-flight requests get correlation |
+| ConsoleSpanExporter + SimpleSpanProcessor for now | Phase 19 = watch it happen; Phase 20 swaps to BatchSpanProcessor(OTLPSpanExporter) pointed at the Collector |
+| 032x / 016x padded hex for trace/span IDs | Canonical OTel string form — what Grafana/Loki expect when joining logs↔traces |
 | Connection per SQLite method call | `sqlite3.Connection` is not thread-safe by default; uvicorn's thread pool must not share one. Open + close per op (the `with` context auto-commits) — negligible cost at our scale |
 | `one role per file` for stores | `vector_store.py` and `metadata_store.py` each own one store + its lazy singleton — mirrors the DB-per-service naming, keeps the two DBs unentangled |
 | Logs: `TimedRotatingFileHandler` over `RotatingFileHandler` | "What happened Tuesday at 3am" is a *time* question; midnight rotation gives one file per day (queryable), size rotation mixes arbitrary chunks of days |
@@ -226,3 +232,12 @@ ai-backend/
 - Updated `app/services/logging.py`: TimedRotatingFileHandler (midnight, backupCount=7) → `logs/app.log` JSON + console
 - Wired `app/routers/documents.py`: ingest records metadata (title fallback to id), GET /documents/metadata, delete purges both stores
 - Verified in-process round-trip: ingest→row+vector, fallback title, delete→both stores empty
+
+### Topic 19: OpenTelemetry Integration
+- Added `opentelemetry-api/sdk`, `opentelemetry-exporter-otlp-proto-http`, `opentelemetry-instrumentation-fastapi`
+- Created `app/services/tracing.py` (setup_tracing: TracerProvider + Resource(service.name) + ConsoleSpanExporter/SimpleSpanProcessor; `get_tracer()` resolves the live provider per call — avoids the import-time NoOp tracer trap)
+- Wired `app/main.py`: setup_tracing() before FastAPIInstrumentor.instrument_app(app); `# pyright: reportMissingTypeStubs=false` for the untyped instrumentation package (same pattern as agent_graph.py)
+- Manual spans in `rag.py` answer_question: answer_question → {embedding, store.search, build_prompt}
+- LLM chokepoint span in `metrics.py` measure_llm_call: `llm_call.{segment}` — one span covers every LLM call (rag, agents, judge)
+- Log→trace bridge in `logging.py` JSONFormatter: trace_id (032x) + span_id (016x) added when the active span is valid; skipped otherwise
+- Proven in-process (zero Docker): all spans share one trace_id; embedding/store.search/build_prompt are siblings under answer_question (shared parent_id); rag_retrieval log line carries that parent span's trace_id+span_id

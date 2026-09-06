@@ -10,7 +10,7 @@ Building a production-grade AI backend incrementally with Python/FastAPI/Groq. P
 - Python 3.14, pyright strict mode, Ruff rules `["E", "F", "I", "UP", "B", "SIM", "RUF"]`, line-length 100
 - LLM: Groq (GROQ_API_KEY), no OpenAI/Anthropic keys
 
-## What's Built (Topics 1-18 ✅)
+## What's Built (Topics 1-19 ✅)
 
 ### Foundations
 1. **Project structure** — flat layout, `app/` package, pyproject.toml
@@ -68,6 +68,16 @@ Building a production-grade AI backend incrementally with Python/FastAPI/Groq. P
     - Documents router: ingest records metadata (title fallback `request.title or request.id`, sha256 content_hash, chunk_count=1), `GET /documents/metadata`, delete purges both stores
     - Verified in-process round-trip; Qdrant + SQLite both empty after delete
 
+### Observability Phase (Topic 19 ✅)
+19. **OpenTelemetry Integration** — `app/services/tracing.py` + instrumentation:
+    - `setup_tracing()`: TracerProvider with `Resource({"service.name": "ai-backend"})`, `SimpleSpanProcessor(ConsoleSpanExporter())` (Phase 19 visibility; Phase 20 → OTLP to Collector)
+    - `get_tracer()` re-resolves the provider per call — avoids the Tracer-welded-to-import-time-NoOp trap
+    - `main.py`: `setup_tracing()` before `FastAPIInstrumentor.instrument_app(app)` → HTTP root span per request; `# pyright: reportMissingTypeStubs=false` (untyped instrumentation package, same pattern as agent_graph.py)
+    - `rag.py`: spans answer_question → {embedding, store.search, build_prompt}
+    - `metrics.py` measure_llm_call: `llm_call.{segment}` span — single chokepoint traces every LLM call
+    - `logging.py` JSONFormatter: `trace_id` (032x) / `span_id` (016x) injected when the active span is valid
+    - Proven in-process (zero Docker): shared trace_id across the tree; siblings share parent_id; rag_retrieval log carries its parent span_id + trace_id
+
 ### Key Files
 - `app/main.py` — mounts 6 routers (health, models, demo, chat, embeddings, documents, rag)
 - `app/services/llm.py` — AsyncOpenAI + Groq, TOOLS (ChatCompletionToolParam), TOOL_MAP, chat() with tools_enabled; qwen reasoning hidden via `reasoning_format` extra_body + `_strip_reasoning` fallback
@@ -80,8 +90,9 @@ Building a production-grade AI backend incrementally with Python/FastAPI/Groq. P
 - `app/services/agent_graph.py` — LangGraph agent (AgentState, call_llm, run_tools, route_after_llm, graph, run_agent_graph)
 - `app/services/agent_mcp.py` — run_mcp_agent() connecting to MCP server
 - `app/services/context.py` — RequestContext dataclass, ContextVar, token-based set/reset
-- `app/services/logging.py` — JSONFormatter (request-scoped fields) + setup_logging (console + TimedRotatingFileHandler to logs/)
-- `app/services/metrics.py` — Prometheus metrics (LLM latency/tokens, HTTP count/duration) + measure_llm_call
+- `app/services/logging.py` — JSONFormatter (request-scoped + trace_id/span_id fields) + setup_logging (console + TimedRotatingFileHandler to logs/)
+- `app/services/tracing.py` — setup_tracing (TracerProvider/Resource/ConsoleSpanExporter) + get_tracer (lazy, per-call)
+- `app/services/metrics.py` — Prometheus metrics (LLM latency/tokens, HTTP count/duration) + measure_llm_call (also opens llm_call.{segment} span)
 - `app/middlewares/request_context.py` — request_id/client_id middleware + HTTP metrics
 - `app/routers/metrics.py` — GET /metrics scrape endpoint
 - `servers/documents.py` — MCP 2.0 server (list_tools, call_tool callbacks)
@@ -125,8 +136,7 @@ Building a production-grade AI backend incrementally with Python/FastAPI/Groq. P
 7. Never edit files without asking — tell user what to edit
 
 ## Next Topics
-19. **OpenTelemetry Integration** — NEXT: OTel Python SDK, traces/spans on LLM + HTTP calls, trace-aware metrics, log→trace correlation via `trace_id`
-20. Observability Stack (Docker) — OTel Collector, Prometheus/Mimir, Grafana Loki, Grafana Tempo in one docker-compose
+20. **Observability Stack (Docker)** — NEXT: OTel Collector, Prometheus/Mimir, Grafana Loki, Grafana Tempo in one docker-compose
 21. Monitoring Dashboards — Grafana datasources + dashboards, alert rules, SLOs, Loki log querying
 22. Auth & API Keys
 23. Background jobs

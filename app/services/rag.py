@@ -3,6 +3,7 @@ from typing import TypedDict
 
 from app.services.embeddings import embed
 from app.services.llm import chat
+from app.services.tracing import get_tracer
 from app.services.vector_store import VectorStore, get_store
 
 logger = logging.getLogger("app.services.rag")
@@ -26,12 +27,23 @@ Question: {question}"""
 
 
 async def answer_question(question: str, store: VectorStore | None = None) -> str:
-    query_embedding = embed([question])[0]
-    store = store or get_store()
-    searched_documents = store.search(query_embedding, top_k=3)
-    logger.info(
-        "rag_retrieval",
-        extra={"extra_fields": {"question": question[:100], "doc_count": len(searched_documents)}},
-    )
-    prompt = build_prompt(question, documents=searched_documents)
-    return await chat(prompt)
+    tracer = get_tracer()
+    with tracer.start_as_current_span("answer_question"):
+        with tracer.start_as_current_span("embedding"):
+            query_embedding = embed([question])[0]
+        store = store or get_store()
+
+        with tracer.start_as_current_span("store.search"):
+            searched_documents = store.search(query_embedding, top_k=3)
+
+        logger.info(
+            "rag_retrieval",
+            extra={
+                "extra_fields": {"question": question[:100], "doc_count": len(searched_documents)}
+            },
+        )
+
+        with tracer.start_as_current_span("build_prompt"):
+            prompt = build_prompt(question, documents=searched_documents)
+
+        return await chat(prompt)
