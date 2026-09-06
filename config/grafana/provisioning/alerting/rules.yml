@@ -1,0 +1,77 @@
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: RAG SLO
+    folder: RAG
+    interval: 1m
+    rules:
+      - uid: rag-high-error-burn
+        title: RAG high error burn (SLO 95%)
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              refId: A
+              expr: ai_backend:error_ratio:5m
+              instant: true
+              datasource:
+                type: prometheus
+                uid: prometheus
+          - refId: C
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0.06]
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: Error ratio above 6% for 5 minutes — burning the 5% error budget
+
+      - uid: rag-slow-llm
+        title: LLM latency p95 above SLO (15s)
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              refId: A
+              expr: histogram_quantile(0.95, sum by (le) (rate(llm_latency_seconds_bucket{job="ai-backend"}[5m])))
+              instant: true
+              datasource:
+                type: prometheus
+                uid: prometheus
+          - refId: C
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [15]
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: LLM call p95 latency above 15s for 5 minutes

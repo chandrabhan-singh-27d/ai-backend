@@ -77,6 +77,15 @@ Building a production-grade AI backend incrementally with Python/FastAPI/Groq. P
     - `metrics.py` measure_llm_call: `llm_call.{segment}` span — single chokepoint traces every LLM call
     - `logging.py` JSONFormatter: `trace_id` (032x) / `span_id` (016x) injected when the active span is valid
     - Proven in-process (zero Docker): shared trace_id across the tree; siblings share parent_id; rag_retrieval log carries its parent span_id + trace_id
+20. **Observability Stack (Docker)** — `docker-compose.yml` + `config/`:
+    - 7 services: qdrant, otel-collector (OTLP ingress 4317/4318, debug + forward to `tempo:4317`), tempo (3200), prometheus (`host.docker.internal:8000` via host-gateway + collector 8888), loki (3100), promtail (tails `logs/app.log*`; json stage promotes trace_id/span_id/level → labels), grafana (3000, auto-provisioned datasources)
+    - Readiness gating: `depends_on: {service: healthy}` chains collector→tempo and promtail→loki; bare depends_on = start-order only
+    - Parse-validated only; container run deferred to final assembly
+21. **Monitoring Dashboards** — SLOs + triage dashboard + alert rules:
+    - SLOs (user-chosen): success ≥ 95%; latency p95 < 15s (loosened from 5s — agent tool loops stack multiple LLM calls)
+    - Recording rules `config/prometheus/rules.yml`: `ai_backend:error_ratio:5m`, `ai_backend:success_ratio:5m`
+    - `config/grafana/provisioning/dashboards/rag-overview.json`: ER-triage layout — Vitals (error-ratio stat, req/s, p95 HTTP w/ 15s threshold) → Diagnostics (LLM p95 overall + by segment, token rate) → Deep-dive (4xx/5xx, Loki error logs `{job="ai-backend"} | json | level = "error"`)
+    - Grafana alert rules (provisioned in `config/grafana/provisioning/alerting/rules.yml`): high error burn (>0.06 ratio → page), slow LLM (p95 > 15s → warning); alerts evaluate the recording rule / p95 query
 
 ### Key Files
 - `app/main.py` — mounts 6 routers (health, models, demo, chat, embeddings, documents, rag)
@@ -103,8 +112,8 @@ Building a production-grade AI backend incrementally with Python/FastAPI/Groq. P
 - `tools/run_eval.py` — eval harness (seed → retrieval check → generate → judge → report → exit code)
 - `app/routers/chat.py` — /chat, /chat/tools, /agent, /agent/mcp, /agent/graph
 - `app/routers/documents.py` — /documents, /search, /documents/metadata, /documents/{id}
-- `docker-compose.yml` — PLANNED: Qdrant, OTel Collector, Prometheus, Loki, Tempo, Grafana
-- `config/otel-collector/`, `config/prometheus/`, `config/grafana/`, `config/loki/`, `config/tempo/` — PLANNED
+- `docker-compose.yml` — INITIAL (not yet run): Qdrant, OTel Collector, Prometheus, Loki, Tempo, Grafana
+- `config/otel-collector/`, `config/prometheus/` (incl. rules.yml), `config/grafana/` (datasources, dashboards/, alerting/), `config/loki/`, `config/tempo/`, `config/promtail/` — INITIAL (not yet run)
 
 ### Key Design Decisions
 - Pydantic for API validation, TypedDict for internal types
@@ -125,6 +134,10 @@ Building a production-grade AI backend incrementally with Python/FastAPI/Groq. P
 - Logs: `TimedRotatingFileHandler` (when=midnight, backupCount=7) chosen over `RotatingFileHandler` — "what happened Tuesday at 3am?" is a time question; one file/day beats size partitions
 - Logs: console + file share one JSONFormatter — identical shape, Loki-ingestable later
 - `hashlib` sha256 fingerprint of content in SQLite row — duplicates guard for re-ingest without byte-compare of full text
+- Observability signal routing (20): traces → OTLP → Collector → Tempo; metrics → Prometheus pull (host-gateway); logs → file → promtail → Loki (json stage promotes trace_id/span_id/level to labels — log→trace bridge at ingestion)
+- SLO alerting (21): error ratio computed once as a Prometheus recording rule, then evaluated in the Grafana alert — never repeat the same PromQL across alert rules; alert on budget burn, not raw metric levels
+- Dashboard layout = ER triage (21): vitals (down? errors?) → diagnostics (where does the time go) → deep-dive (log/trace evidence); latency SLO drawn as a threshold line on the p95 panel
+- Grafana provisioning = declarative infra (21): datasources/dashboards/alert rules are files with stable UIDs so cross-references survive renames; Prometheus datasource got `uid: prometheus` so alert rules can target it
 
 ## Teaching Rules
 1. No dumping solutions — hints first, increase progressively
@@ -136,9 +149,9 @@ Building a production-grade AI backend incrementally with Python/FastAPI/Groq. P
 7. Never edit files without asking — tell user what to edit
 
 ## Next Topics
-20. **Observability Stack (Docker)** — NEXT: OTel Collector, Prometheus/Mimir, Grafana Loki, Grafana Tempo in one docker-compose
-21. Monitoring Dashboards — Grafana datasources + dashboards, alert rules, SLOs, Loki log querying
-22. Auth & API Keys
+20. **Observability Stack (Docker)** — DONE — config written, bootstrap run deferred to final assembly
+21. **Monitoring Dashboards** — DONE — SLOs, triage dashboard, alert rules provisioned (config only)
+22. **Auth & API Keys** — NEXT
 23. Background jobs
 24. Deployment
 25. Production architecture

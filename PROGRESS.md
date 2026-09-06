@@ -241,3 +241,23 @@ ai-backend/
 - LLM chokepoint span in `metrics.py` measure_llm_call: `llm_call.{segment}` — one span covers every LLM call (rag, agents, judge)
 - Log→trace bridge in `logging.py` JSONFormatter: trace_id (032x) + span_id (016x) added when the active span is valid; skipped otherwise
 - Proven in-process (zero Docker): all spans share one trace_id; embedding/store.search/build_prompt are siblings under answer_question (shared parent_id); rag_retrieval log line carries that parent span's trace_id+span_id
+
+### Topic 20: Observability Stack (Docker)
+- Wrote `docker-compose.yml` — 7 services: qdrant + otel-collector + tempo + prometheus + loki + promtail + grafana
+- Collector is the single trace ingress (host ports 4317/4318); debug-prints every span and forwards gRPC to `tempo:4317`
+- Forwarders gate on downstream readiness: `depends_on + condition: service_healthy` (collector→tempo, promtail→loki); bare depends_on is start-order only
+- Prometheus pulls from `host.docker.internal:8000` (needs `extra_hosts: host-gateway`) + collector `:8888`; tempo/loki published ports kept unique (collector owns OTLP on host)
+- Promtail tails `logs/app.log*` (live + rotated), json stage promotes trace_id/span_id/level to Loki labels — the log→trace bridge at ingestion
+- Grafana auto-provisions datasources on boot (Prometheus default, Tempo, Loki; stable UIDs)
+- Parse-validated only; container run deferred to final assembly (user decision: complete project first)
+
+### Topic 21: Monitoring Dashboards
+- SLOs (user-chosen): success ≥ 95%; latency p95 < 15s (loosened from 5s — agent tool loops stack multiple LLM calls)
+- `config/prometheus/rules.yml` — recording rules `ai_backend:error_ratio:5m` and `ai_backend:success_ratio:5m` (5xx-only error signal; sum by () collapses to one series)
+- PromQL grounded in real labels: path = route template, status = string code, p95 via histogram_quantile over `_bucket`
+- `config/grafana/provisioning/dashboards/rag-overview.json` — ER-triage layout:
+  - Vitals: error-ratio stat (green/orange/red at 2%/5%), req/s, p95 HTTP latency with 15s threshold line
+  - Diagnostics: LLM p95 overall, LLM p95 by segment, token rate
+  - Deep-dive: 4xx/5xx rates, Loki error-log panel `{job="ai-backend"} | json | level = "error"`
+- Grafana alert rules (provisioned, evaluate the recording rule + p95 query): high error burn (>0.06 ratio for 5m, severity page) and slow LLM (p95 > 15s for 5m, severity warning) — alert on SLO burn, not raw metrics
+- All config/JSON/YAML parse-validated; live rendering deferred to final assembly
