@@ -94,6 +94,14 @@ Building a production-grade AI backend incrementally with Python/FastAPI/Groq. P
     - TTFT: `llm_time_to_first_token_seconds` Histogram (LLM_TTFT, labels model/segment) recorded at first content token in streaming paths
     - `tools/stream_test.py`: in-process ASGITransport SSE test, verified against real Groq
     - **pyright root-cause fix**: tools-path streaming errors came from `messages: list[dict[str, object]]` breaking SDK overload resolution (→ Unknown return). Fix = type `messages: list[ChatCompletionMessageParam]` from `openai.types.chat` — removed all `# type: ignore[arg-type]`, no pragmas/casts
+23. **Auth & API Keys**:
+    - `app/services/api_keys.py` — `ApiKeysStore` in its own DB (`data/keys.db`, WAL, per-call connections). Keys are `ak_live_<32 hex>`; only their **SHA-256 hash** is stored (same dedup mind-set as content_hash). `create(name)` returns the full key exactly once; `find(input)` hashes-and-matches and excludes `revoked=1`; `revoke()` keeps the row (audit history); `list_all()` returns `fingerprint = substr(key_hash,1,8)` so you can identify keys without a leak vector
+    - `app/dependencies.py` — `HTTPBearer(auto_error=False)` (default raises 403 — wrong code; we want 401 both missing and invalid with `WWW-Authenticate: Bearer`). `Annotated[HTTPAuthorizationCredentials | None, Depends(...)]` alias avoids Ruff **B008** (function call in argument default). `require_api_key` stores the key row on `request.state.api_key`; `require_rate_limit` → **429**
+    - `app/services/rate_limiter.py` — sliding-window per key: `deque[float]` of `time.monotonic()` timestamps, prune-with-while, count in window; `PROTECTED = [Depends(require_api_key), Depends(require_rate_limit)]`
+    - Routers `chat`, `documents`, `embeddings`, `rag` → `APIRouter(dependencies=PROTECTED)`; `/health` + `/metrics` stay public. Dependency rejection precedes the handler → unauthenticated `/redis`-expensive calls never cold-load the embedding model
+    - `tools/manage_keys.py` — argparse subcommand CLI (`create NAME` / `list` / `revoke KEY_ID`), `set_defaults(func=...)` dispatch
+    - `auth_failures_total` Counter, labels `reason`: `missing_key` / `invalid_key` / `rate_limited`
+    - Verified live: 401/401/200 matrix, 58×200→429 hammer (bucket is per-key across all endpoints), metrics grep `missing_key=1, invalid_key=2`
 
 ### Key Files
 - `app/main.py` — mounts 6 routers (health, models, demo, chat, embeddings, documents, rag)
@@ -109,7 +117,10 @@ Building a production-grade AI backend incrementally with Python/FastAPI/Groq. P
 - `app/services/context.py` — RequestContext dataclass, ContextVar, token-based set/reset
 - `app/services/logging.py` — JSONFormatter (request-scoped + trace_id/span_id fields) + setup_logging (console + TimedRotatingFileHandler to logs/)
 - `app/services/tracing.py` — setup_tracing (TracerProvider/Resource/ConsoleSpanExporter) + get_tracer (lazy, per-call)
-- `app/services/metrics.py` — Prometheus metrics (LLM latency/tokens, HTTP count/duration) + measure_llm_call (also opens llm_call.{segment} span)
+- `app/services/metrics.py` — Prometheus metrics (LLM latency/tokens/TTFT, HTTP count/duration, auth failures) + measure_llm_call (also opens llm_call.{segment} span)
+- `app/services/api_keys.py` — ApiKeysStore (hash-only storage) + generate/hash utils
+- `app/services/rate_limiter.py` — sliding-window per-key limiter (in-memory)
+- `app/dependencies.py` — require_api_key + require_rate_limit + PROTECTED dependency list
 - `app/middlewares/request_context.py` — request_id/client_id middleware + HTTP metrics
 - `app/routers/metrics.py` — GET /metrics scrape endpoint
 - `servers/documents.py` — MCP 2.0 server (list_tools, call_tool callbacks)
@@ -118,6 +129,7 @@ Building a production-grade AI backend incrementally with Python/FastAPI/Groq. P
 - `tools/eval_cases.json` — golden eval cases (questions, expected_doc_ids, expected_facts, answerable flag)
 - `tools/corpus.json` — seed documents so the eval suite is self-contained
 - `tools/run_eval.py` — eval harness (seed → retrieval check → generate → judge → report → exit code)
+- `tools/manage_keys.py` — API key CLI (create / list / revoke)
 - `app/routers/chat.py` — /chat, /chat/tools, /agent, /agent/mcp, /agent/graph (all three main endpoints support opt-in SSE streaming + max_tokens)
 - `tools/stream_test.py` — in-process SSE stream test (/chat, /chat/tools, /agent)
 - `app/routers/documents.py` — /documents, /search, /documents/metadata, /documents/{id}
@@ -147,6 +159,11 @@ Building a production-grade AI backend incrementally with Python/FastAPI/Groq. P
 - SLO alerting (21): error ratio computed once as a Prometheus recording rule, then evaluated in the Grafana alert — never repeat the same PromQL across alert rules; alert on budget burn, not raw metric levels
 - Dashboard layout = ER triage (21): vitals (down? errors?) → diagnostics (where does the time go) → deep-dive (log/trace evidence); latency SLO drawn as a threshold line on the p95 panel
 - Grafana provisioning = declarative infra (21): datasources/dashboards/alert rules are files with stable UIDs so cross-references survive renames; Prometheus datasource got `uid: prometheus` so alert rules can target it
+- Hash-only API keys (23): full key is a 128-bit secret shown exactly once at `create()`; DB stores `sha256(key)` — a DB leak yields no usable keys, same dedup/fingerprint mind-set as `content_hash`
+- `Annotated[..., Depends()]` not `x = Depends()` (23): the `= Depends()` FastAPI idiom trips Ruff B008 (function call in argument defaults); moving the dependency into the annotation is both lint-clean and the modern FastAPI style
+- Auth-before-compute (23): dependency 401 fires before the handler runs, so unauthenticated expensive routes (`/embeddings`, `/rag`) never cold-start the ~30s embedding model
+- HTTP status honesty (23): missing AND invalid keys both → 401 (`WWW-Authenticate: Bearer`), never 403 (that's authenticated-but-forbidden); `auto_error=False` because `HTTPBearer`'s default raises 403 on missing headers
+- In-memory sliding window (23): per-key `deque` of `time.monotonic()` timestamps, single process only — each uvicorn worker has its own counter, so distributed rate limiting needs shared state (Redis)
 
 ## Teaching Rules
 1. No dumping solutions — hints first, increase progressively
@@ -161,7 +178,7 @@ Building a production-grade AI backend incrementally with Python/FastAPI/Groq. P
 20. **Observability Stack (Docker)** — DONE — config written, bootstrap run deferred to final assembly
 21. **Monitoring Dashboards** — DONE — SLOs, triage dashboard, alert rules provisioned (config only)
 22. **Streaming SSE** — DONE — opt-in SSE, configurable max_tokens, TTFT metric
-23. **Auth & API Keys** — NEXT
+23. **Auth & API Keys** — DONE — Bearer keys (hash-only), per-key rate limiting, CLI, auth metrics
 24. Background jobs
 25. Deployment
 26. Production architecture
@@ -183,6 +200,7 @@ Building a production-grade AI backend incrementally with Python/FastAPI/Groq. P
 - Test MCP with: `PYTHONPATH=. uv run python tools/mcp_client.py documents`
 - Test agents side-by-side with: `PYTHONPATH=. uv run python tools/test_agent_graph.py`
 - Test SSE streaming with: `PYTHONPATH=. uv run python tools/stream_test.py`
+- Manage API keys with: `PYTHONPATH=. uv run python tools/manage_keys.py create NAME` / `list` / `revoke KEY_ID`
 - Run eval suite with: `PYTHONPATH=. uv run python tools/run_eval.py` (exit 1 = suite FAIL; currently PASS, avg 4.60/5)
 - Document ingestion needed before RAG/agent tests work
 - Inspect structured logs in the server stdout (JSON lines) and `logs/app.log` (timed rotation, one file/day, 7-day retention); `request_id` correlates a request's journey

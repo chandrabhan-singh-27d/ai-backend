@@ -62,7 +62,7 @@
 | 20 | Observability Stack (Docker) | ⬜ | OTel Collector, Prometheus/Mimir, Grafana Loki, Grafana Tempo |
 | 21 | Monitoring Dashboards | ✅ | Grafana dashboards, alerting rules, SLOs, log querying |
 | 22 | Streaming SSE | ✅ | Server-Sent Events, token/tool/done frames, TTFT, configurable max_tokens |
-| 23 | Auth & API Keys | ⬜ | Authentication, rate limiting, API key management |
+| 23 | Auth & API Keys | ✅ | Bearer API keys (hash-only storage), per-key rate limiting, management CLI |
 | 23 | Background jobs | ⬜ | Task queues, async processing |
 | 24 | Deployment | ⬜ | Docker, CI/CD, hosting |
 | 25 | Production architecture | ⬜ | Scalability, reliability, cost optimization |
@@ -273,3 +273,13 @@ ai-backend/
 - **Configurable tokens**: `max_tokens: int = 400` added to chat(), chat_stream(), run_agent(), run_agent_stream() and threaded from request models (`max_tokens` field on each request). Lets tuning raise/lower caps per endpoint without code edits
 - **TTFT metric**: `llm_time_to_first_token_seconds` Histogram (`LLM_TTFT`) in metrics.py, labels `model`/`segment`; recorded at first content token in all streaming paths (chat_stream final, agent rounds)
 - **Root-cause fix**: the 4 pyright errors on tools-path streaming were caused by `messages` annotated as `list[dict[str, object]]` → SDK overload resolution failed → `create()` returned `Unknown`. Fixed by typing `messages: list[ChatCompletionMessageParam]` (import from `openai.types.chat`) — no `# type: ignore`, no pragmas, no casts
+
+### Topic 23: Auth & API Keys
+- `app/services/api_keys.py` — `ApiKeysStore` (separate DB `data/keys.db`, WAL): API keys stored as **SHA-256 hashes only**; key format `ak_live_<32 hex>` (128-bit entropy via `secrets.token_hex(16)`); `create()` returns the full key exactly once; `find()` matches `hash_key(input)` → row or None; `revoked` flag (row kept for audit, filter `revoked = 0`); `fingerprint = substr(key_hash, 1, 8)` so listings identify keys without leaking them
+- `app/dependencies.py` — `HTTPBearer(auto_error=False)` → `Annotated[HTTPAuthorizationCredentials | None, Depends(...)]` (avoids Ruff B008 on `Depends()` in defaults); `require_api_key` sets `request.state.api_key`; `require_rate_limit` enforces per-key sliding-window cap (60/min); `PROTECTED = [Depends(require_api_key), Depends(require_rate_limit)]`
+- `app/services/rate_limiter.py` — sliding window via `deque[float]` of `time.monotonic()` hits per key; in-memory only (per-process, not distributed — Redis needed at scale)
+- Protected routers: `chat`, `documents`, `embeddings`, `rag` (via `APIRouter(dependencies=PROTECTED)`); `/health` + `/metrics` stay public
+- **Auth is a firewall before work**: dependency 401s fire before the endpoint handler runs → unauthenticated `/rag`/`/embeddings` calls never start the ~30s embedding model load
+- `tools/manage_keys.py` — argparse subcommand CLI: `create NAME` (shows key once), `list` (id/name/prefix/fingerprint/status/created_at), `revoke KEY_ID`
+- `auth_failures_total` Counter (labels `reason`: `missing_key` / `invalid_key` / `rate_limited`) — increments at every rejection, Prometheus-monotonic
+- Verified live: 401 no-key + bad-key, 200 good-key, 58×200 → 429 on 65-request hammer (bucket shared per key across endpoints), `auth_failures_total{missing_key=1, invalid_key=2}`

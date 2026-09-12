@@ -6,12 +6,13 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+from app.dependencies import PROTECTED
 from app.services.agent import run_agent, run_agent_stream
 from app.services.agent_graph import run_agent_graph
 from app.services.agent_mcp import run_mcp_agent
 from app.services.llm import chat, chat_stream
 
-router = APIRouter()
+router = APIRouter(dependencies=PROTECTED)
 logger = logging.getLogger("app.routers.chat")
 
 

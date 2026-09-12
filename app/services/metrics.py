@@ -31,6 +31,10 @@ HTTP_REQUEST_DURATION = Histogram(
     labelnames=["method", "path"],
 )
 
+AUTH_FAILURES = Counter(
+    "auth_failures_total", "Failed authentication and rate-limit attempts", labelnames=["reason"]
+)
+
 
 @contextmanager
 def measure_llm_call(model: str, tools_enabled: bool, segment: str):

@@ -3,11 +3,12 @@ import hashlib
 from fastapi import APIRouter
 from pydantic import BaseModel
 
+from app.dependencies import PROTECTED
 from app.services.embeddings import embed
 from app.services.metadata_store import get_metadata_store
 from app.services.vector_store import get_store
 
-router = APIRouter()
+router = APIRouter(dependencies=PROTECTED)
 
 
 class IngestRequest(BaseModel):
@@ -48,6 +49,7 @@ def search_documents(request: SearchRequest) -> list[SearchResult]:
     query_embedding = embed([request.query])[0]
     results = get_store().search(query_embedding, top_k=request.top_k)
     return [SearchResult(**r) for r in results]
+
 
 @router.get("/documents/metadata")
 def list_metadata() -> list[dict[str, object]]:

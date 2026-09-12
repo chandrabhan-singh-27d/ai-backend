@@ -1,9 +1,10 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
 
+from app.dependencies import PROTECTED
 from app.services.embeddings import cosine_similarity, embed
 
-router = APIRouter()
+router = APIRouter(dependencies=PROTECTED)
 
 
 class EmbedRequst(BaseModel):
