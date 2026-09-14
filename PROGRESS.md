@@ -63,10 +63,10 @@
 | 21 | Monitoring Dashboards | ✅ | Grafana dashboards, alerting rules, SLOs, log querying |
 | 22 | Streaming SSE | ✅ | Server-Sent Events, token/tool/done frames, TTFT, configurable max_tokens |
 | 23 | Auth & API Keys | ✅ | Bearer API keys (hash-only storage), per-key rate limiting, management CLI |
-| 23 | Background jobs | ⬜ | Task queues, async processing |
-| 24 | Deployment | ⬜ | Docker, CI/CD, hosting |
-| 25 | Production architecture | ⬜ | Scalability, reliability, cost optimization |
-| 26 | Capstone project | ⬜ | Full-stack AI application |
+| 24 | Background jobs | ✅ | Task queues, async processing: durable SQLite job queue, worker loop, 202 + poll |
+| 25 | Deployment | ⬜ | Docker, CI/CD, hosting |
+| 26 | Production architecture | ⬜ | Scalability, reliability, cost optimization |
+| 27 | Capstone project | ⬜ | Full-stack AI application |
 
 ---
 
@@ -283,3 +283,15 @@ ai-backend/
 - `tools/manage_keys.py` — argparse subcommand CLI: `create NAME` (shows key once), `list` (id/name/prefix/fingerprint/status/created_at), `revoke KEY_ID`
 - `auth_failures_total` Counter (labels `reason`: `missing_key` / `invalid_key` / `rate_limited`) — increments at every rejection, Prometheus-monotonic
 - Verified live: 401 no-key + bad-key, 200 good-key, 58×200 → 429 on 65-request hammer (bucket shared per key across endpoints), `auth_failures_total{missing_key=1, invalid_key=2}`
+
+### Topic 24: Background Jobs
+- `app/services/job_store.py` — `JobStore` (own DB `data/jobs.db`, WAL): status machine `pending → running → succeeded | failed`; `create()` mints `uuid.uuid4().hex` — **random per execution** (uuid5 determinism is reserved for *thing* identity, e.g. `content_hash` dedup); `claim()` atomically grabs one pending job via an `UPDATE ... WHERE id=? AND status='pending'` + `rowcount` guard, so concurrent workers can't double-run a job; `complete()`/`fail()` record outcome + timestamps; lazy singleton `get_job_store()`
+- `Job` `TypedDict` (`id` / `kind` / `payload`) — precise shape instead of `dict[str, object]`: consumers get real types (`job["kind"]` is `str`, `job["payload"]` is a `dict`) with no `# type: ignore`
+- `app/services/worker.py` — dispatch table `JOB_HANDLERS: {kind → async handler}` (adding a job kind = adding a dict row, no `if/elif`); `run_worker_loop()` claims every 0.5 s, wraps the handler in `try/except`, then `complete()`/`fail()` with logged traceback; `_ingest_document` owns the embed → vector → metadata pipeline that the router used to run inline
+- `app/routers/jobs.py` — `GET /jobs/{job_id}` status endpoint (404 for unknown id); protected like the other private routers
+- `app/routers/documents.py` — `POST /documents` now *enqueues* `ingest_document` and returns **202 Accepted** `{"status": "accepted", "job_id": ...}`; the request path is a single SQLite insert, so the ~30s embedding model never loads inside the HTTP handler; `/search`, metadata list, delete unchanged
+- `app/main.py` — `lifespan` starts `asyncio.create_task(run_worker_loop())`, cancels + `gather` on shutdown; on modern Python, `@asynccontextmanager` wants an `AsyncGenerator` return annotation (not `AsyncIterator`)
+- **Why a table, not `BackgroundTasks`**: a durable jobs DB survives restarts and makes failures *queryable* (status + error columns) instead of a lost HTTP 500; `BackgroundTasks` is in-memory and dies with the process
+- **REST async contract**: `202 Accepted` (+ poll a status resource) is the canonical "accepted for processing" answer; the worker runs in-process so a single uvicorn process runs both API + worker — production swaps the broker (Redis) and runs the worker as a separate process
+- Blocking `embed()` inside the async worker loop is acceptable for a single-purpose worker; production uses `await asyncio.to_thread(...)`
+- Note: leftover `running` rows after a crash are the reason real queues keep heartbeats (future lesson); `ingest_document` still lands `failed` today until Qdrant is up

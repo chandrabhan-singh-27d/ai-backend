@@ -104,7 +104,10 @@ Building a production-grade AI backend incrementally with Python/FastAPI/Groq. P
     - Verified live: 401/401/200 matrix, 58×200→429 hammer (bucket is per-key across all endpoints), metrics grep `missing_key=1, invalid_key=2`
 
 ### Key Files
-- `app/main.py` — mounts 6 routers (health, models, demo, chat, embeddings, documents, rag)
+- `app/main.py` — mounts 7 routers (health, models, demo, chat, embeddings, documents, rag, jobs) + lifespan that starts/stops the background worker
+- `app/services/job_store.py` — JobStore (data/jobs.db): create/claim/get/complete/fail + Job TypedDict
+- `app/services/worker.py` — run_worker_loop (claim → dispatch via JOB_HANDLERS → complete/fail), _ingest_document handler
+- `app/routers/jobs.py` — GET /jobs/{job_id} status endpoint (404 unknown id)
 - `app/services/llm.py` — AsyncOpenAI + Groq, TOOLS (ChatCompletionToolParam), TOOL_MAP, chat() with tools_enabled; qwen reasoning hidden via `reasoning_format` extra_body + `_strip_reasoning` fallback
 - `app/services/embeddings.py` — SentenceTransformer, embed(), cosine_similarity()
 - `app/services/vector_store.py` — Qdrant-backed VectorStore + get_store() lazy singleton
@@ -132,7 +135,7 @@ Building a production-grade AI backend incrementally with Python/FastAPI/Groq. P
 - `tools/manage_keys.py` — API key CLI (create / list / revoke)
 - `app/routers/chat.py` — /chat, /chat/tools, /agent, /agent/mcp, /agent/graph (all three main endpoints support opt-in SSE streaming + max_tokens)
 - `tools/stream_test.py` — in-process SSE stream test (/chat, /chat/tools, /agent)
-- `app/routers/documents.py` — /documents, /search, /documents/metadata, /documents/{id}
+- `app/routers/documents.py` — /documents (now **enqueues a job → 202** + job_id), /search, /documents/metadata, /documents/{id}
 - `docker-compose.yml` — INITIAL (not yet run): Qdrant, OTel Collector, Prometheus, Loki, Tempo, Grafana
 - `config/otel-collector/`, `config/prometheus/` (incl. rules.yml), `config/grafana/` (datasources, dashboards/, alerting/), `config/loki/`, `config/tempo/`, `config/promtail/` — INITIAL (not yet run)
 
@@ -179,7 +182,7 @@ Building a production-grade AI backend incrementally with Python/FastAPI/Groq. P
 21. **Monitoring Dashboards** — DONE — SLOs, triage dashboard, alert rules provisioned (config only)
 22. **Streaming SSE** — DONE — opt-in SSE, configurable max_tokens, TTFT metric
 23. **Auth & API Keys** — DONE — Bearer keys (hash-only), per-key rate limiting, CLI, auth metrics
-24. Background jobs
+24. **Background jobs** — DONE — durable SQLite job queue, worker loop, 202 + poll; `/documents` ingest is now async
 25. Deployment
 26. Production architecture
 27. Capstone project
@@ -201,6 +204,8 @@ Building a production-grade AI backend incrementally with Python/FastAPI/Groq. P
 - Test agents side-by-side with: `PYTHONPATH=. uv run python tools/test_agent_graph.py`
 - Test SSE streaming with: `PYTHONPATH=. uv run python tools/stream_test.py`
 - Manage API keys with: `PYTHONPATH=. uv run python tools/manage_keys.py create NAME` / `list` / `revoke KEY_ID`
+- Test background jobs: start the app, `POST /documents` → 202 `{job_id}`, poll `GET /jobs/{job_id}` for `pending→running→succeeded|failed`; `ingest_document` fails today until Qdrant is up (good for verifying the failure column)
+- Run pyright **per file only** (whole repo is slow/times out): `uv run pyright app/services/job_store.py app/services/worker.py ...`; pyright pin bumped to `>=1.1.414` to silence the version nag
 - Run eval suite with: `PYTHONPATH=. uv run python tools/run_eval.py` (exit 1 = suite FAIL; currently PASS, avg 4.60/5)
 - Document ingestion needed before RAG/agent tests work
 - Inspect structured logs in the server stdout (JSON lines) and `logs/app.log` (timed rotation, one file/day, 7-day retention); `request_id` correlates a request's journey

@@ -1,10 +1,9 @@
-import hashlib
-
-from fastapi import APIRouter
+from fastapi import APIRouter, status
 from pydantic import BaseModel
 
 from app.dependencies import PROTECTED
 from app.services.embeddings import embed
+from app.services.job_store import get_job_store
 from app.services.metadata_store import get_metadata_store
 from app.services.vector_store import get_store
 
@@ -29,19 +28,29 @@ class SearchResult(BaseModel):
     score: float
 
 
-@router.post("/documents")
+@router.post("/documents", status_code=status.HTTP_202_ACCEPTED)
 def ingest_document(request: IngestRequest) -> dict[str, str]:
-    embedding = embed([request.text])
-    get_store().add(doc_id=request.id, text=request.text, embedding=embedding[0])
-    content_hash = hashlib.sha256(request.text.encode()).hexdigest()
-    get_metadata_store().add_document(
-        doc_id=request.id,
-        title=request.title or request.id,
-        content_hash=content_hash,
-        source=request.source,
-        chunk_count=1,
+    job_id = get_job_store().create(
+        "ingest_document",
+        {
+            "id": request.id,
+            "text": request.text,
+            "title": request.title,
+            "source": request.source,
+        },
     )
-    return {"status": "ok", "id": request.id}
+    return {"status": "accepted", "job_id": job_id}
+    # embedding = embed([request.text])
+    # get_store().add(doc_id=request.id, text=request.text, embedding=embedding[0])
+    # content_hash = hashlib.sha256(request.text.encode()).hexdigest()
+    # get_metadata_store().add_document(
+    #     doc_id=request.id,
+    #     title=request.title or request.id,
+    #     content_hash=content_hash,
+    #     source=request.source,
+    #     chunk_count=1,
+    # )
+    # return {"status": "ok", "id": request.id}
 
 
 @router.post("/search")
