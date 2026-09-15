@@ -3,8 +3,8 @@ groups:
     rules:
       - record: ai_backend:error_ratio:5m
         expr: |
-          sum by () (rate(http_requests_total{job="ai-backend", status=~"5.."}[5m]))
+          (sum by () (rate(http_requests_total{job="ai-backend", status=~"5.."}[5m])) or on() vector(0))
           /
-          sum by () (rate(http_requests_total{job="ai-backend"}[5m]))
+          clamp_min(sum by () (rate(http_requests_total{job="ai-backend"}[5m])), 1)
       - record: ai_backend:success_ratio:5m
         expr: 1 - ai_backend:error_ratio:5m

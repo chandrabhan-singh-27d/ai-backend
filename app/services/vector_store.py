@@ -1,3 +1,4 @@
+import os
 import uuid
 from typing import TypedDict
 
@@ -109,7 +110,7 @@ def get_store() -> VectorStore:
     global _store
     if _store is None:
         _store = VectorStore(
-            client=QdrantClient(url="http://localhost:6333"),
+            client=QdrantClient(url=os.getenv("QDRANT_URL", "http://localhost:6333")),
             collection="documents",
             vector_size=384,
         )

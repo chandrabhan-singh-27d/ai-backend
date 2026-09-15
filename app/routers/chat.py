@@ -71,7 +71,7 @@ async def chat_endpoint(request: ChatRequest) -> ChatResponse | StreamingRespons
         )
     try:
         content = await chat(request.message, max_tokens=request.max_tokens)
-        return ChatResponse(response=content, model="qwen/qwen3.6-27b")
+        return ChatResponse(response=content, model="qwen/qwen3.8-27b")
     except Exception as e:
         logger.exception("chat_endpoint_failed")
         raise HTTPException(status_code=502, detail=str(e)) from e

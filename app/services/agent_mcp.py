@@ -60,15 +60,15 @@ async def run_mcp_agent(question: str, max_steps: int = 5) -> str:
 
         for _step in range(max_steps):
             with measure_llm_call(
-                model="qwen/qwen3.6-27b", tools_enabled=True, segment="agent_mcp"
+                model="qwen/qwen3.8-27b", tools_enabled=True, segment="agent_mcp"
             ):
                 response = await client.chat.completions.create(
-                    model="qwen/qwen3.6-27b",
+                    model="qwen/qwen3.8-27b",
                     messages=messages,  # type: ignore[arg-type]
                     tools=openai_tools,  # type: ignore[arg-type]
                 )
             if response.usage is not None:
-                LLM_TOKENS.labels(model="qwen/qwen3.6-27b", tools_enabled="true").inc(
+                LLM_TOKENS.labels(model="qwen/qwen3.8-27b", tools_enabled="true").inc(
                     response.usage.total_tokens
                 )
 

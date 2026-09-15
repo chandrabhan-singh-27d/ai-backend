@@ -20,14 +20,14 @@ class AgentState(TypedDict):
 
 
 async def call_llm(state: AgentState) -> dict[str, list[dict[str, object]]]:
-    with measure_llm_call(model="qwen/qwen3.6-27b", tools_enabled=True, segment="agent_graph"):
+    with measure_llm_call(model="qwen/qwen3.8-27b", tools_enabled=True, segment="agent_graph"):
         response = await client.chat.completions.create(
-            model="qwen/qwen3.6-27b",
+            model="qwen/qwen3.8-27b",
             messages=state["messages"],  # type: ignore[arg-type]
             tools=TOOLS,
         )
     if response.usage is not None:
-        LLM_TOKENS.labels(model="qwen/qwen3.6-27b", tools_enabled="true").inc(
+        LLM_TOKENS.labels(model="qwen/qwen3.8-27b", tools_enabled="true").inc(
             response.usage.total_tokens
         )
 

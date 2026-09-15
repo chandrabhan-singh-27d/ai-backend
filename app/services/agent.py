@@ -20,15 +20,15 @@ async def run_agent(question: str, max_steps: int = 5, max_tokens: int = 400) ->
     messages: list[dict[str, object]] = [{"role": "user", "content": question}]
 
     for _step in range(max_steps):
-        with measure_llm_call(model="qwen/qwen3.6-27b", tools_enabled=True, segment="agent_round"):
+        with measure_llm_call(model="qwen/qwen3.8-27b", tools_enabled=True, segment="agent_round"):
             response = await client.chat.completions.create(
-                model="qwen/qwen3.6-27b",
+                model="qwen/qwen3.8-27b",
                 messages=messages,  # type: ignore[arg-type]
                 tools=TOOLS,
                 max_tokens=max_tokens,
             )
         if response.usage is not None:
-            LLM_TOKENS.labels(model="qwen/qwen3.6-27b", tools_enabled="true").inc(
+            LLM_TOKENS.labels(model="qwen/qwen3.8-27b", tools_enabled="true").inc(
                 response.usage.total_tokens
             )
 
@@ -69,11 +69,11 @@ async def run_agent_stream(
         tool_calls: dict[int, dict[str, str]] = {}
         usage: CompletionUsage | None = None
 
-        with measure_llm_call(model="qwen/qwen3.6-27b", tools_enabled=True, segment="agent_round"):
+        with measure_llm_call(model="qwen/qwen3.8-27b", tools_enabled=True, segment="agent_round"):
             ttft_start = perf_counter()
             ttft_recorded = False
             stream: AsyncStream[ChatCompletionChunk] = await client.chat.completions.create(
-                model="qwen/qwen3.6-27b",
+                model="qwen/qwen3.8-27b",
                 messages=messages,
                 tools=TOOLS,
                 max_tokens=max_tokens,
@@ -89,7 +89,7 @@ async def run_agent_stream(
                 if delta:
                     if delta.content:
                         if not ttft_recorded:
-                            LLM_TTFT.labels(model="qwen/qwen3.6-27b", segment="agent").observe(
+                            LLM_TTFT.labels(model="qwen/qwen3.8-27b", segment="agent").observe(
                                 perf_counter() - ttft_start
                             )
                             ttft_recorded = True
@@ -107,7 +107,7 @@ async def run_agent_stream(
                     usage = chunk.usage
 
         if usage is not None:
-            LLM_TOKENS.labels(model="qwen/qwen3.6-27b", tools_enabled="true").inc(
+            LLM_TOKENS.labels(model="qwen/qwen3.8-27b", tools_enabled="true").inc(
                 usage.total_tokens
             )
             log_llm_usage("agent_round", True, usage.total_tokens)

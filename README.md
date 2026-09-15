@@ -19,6 +19,45 @@ uv run fastapi dev
 uv run ruff check app/
 ```
 
+## Docker Deployment
+
+The full stack (app + Qdrant + observability) runs via Docker Compose.
+
+```bash
+# Start (first time or after code changes)
+docker compose up -d --build
+
+# Start (subsequent times)
+docker compose up -d
+
+# Follow app logs (JSON to stdout, also rotated in logs/app.log)
+docker compose logs -f app
+
+# Stop everything (keeps data and images)
+docker compose down
+
+# Stop and remove containers, images, and volumes
+docker compose down -v --rmi all --remove-orphans
+```
+
+### Docker Desktop
+
+Containers auto-restart when Docker Desktop launches. To manage they stack manually:
+open **Docker Desktop → Containers**, select the `ai-backend` group, and use **Start**/**Stop**/**Restart**.
+
+### Services
+
+| Service   | URL                                   | Notes                              |
+| --------- | ------------------------------------- | ---------------------------------- |
+| API       | <http://localhost:8000>               | `/health` for status               |
+| Grafana   | <http://localhost:3000>               | Anonymous auth, admin/admin        |
+| Prometheus| <http://localhost:9090>               | Metrics                            |
+| Qdrant    | <http://localhost:6333>               | Vector DB                          |
+| Tempo     | <http://localhost:3200>               | Traces                             |
+| Loki      | <http://localhost:3100>               | Logs                               |
+
+> **Note:** `docker compose down -v` deletes Qdrant vectors, SQLite databases, logs, and API keys.
+
 ## API Endpoints
 
 ### Health
