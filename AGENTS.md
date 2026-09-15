@@ -169,14 +169,21 @@ Backlog items (each becomes an issue, each fixed in its own commit):
 10. **`.env` import-order risk** — routers import before `load_dotenv()` runs; break via
     `.env`-only key (see `main.py:11`).
 
-### ⬜ Phase 5 — Production-ready hardening (after backlogs addressed)
+### ⬜ Phase 5 — FIX the Phase-4 backlog issues (one issue per commit)
+The issues created in Phase 4 ARE the work here. Before any production hardening, every
+open issue from Phase 4 must be resolved:
+- One focused commit per issue (they map 1:1 to GitHub issues; reference `closes #N`).
+- Each commit runs `uv run ruff check app/` + the matching smoke test before done.
+- Update this roadmap (checked boxes + issue links) as each issue lands.
+
+### ⬜ Phase 6 — Production-ready hardening (after ALL Phase-4/5 backlog issues are fixed)
 - CI/CD: extend `.github/workflows/lint.yml` → add build (docker build), tests, maybe deploy.
 - Env hygiene: `.env.example` for everything; config docs; health/readiness split.
 - Security: SSRF guard removed/fixed, secrets handling, dependency audit (uv audit).
 - Docker: non-root already used; pin base images; healthcheck pass; trim image size.
 - Scale concerns documented: single-worker rate limiting, Qdrant sizes, llm latency SLO.
 
-### ⬜ Phase 6 — Replace PROGRESS.md / CONTINUATION.md with a narrative doc
+### ⬜ Phase 7 — Replace PROGRESS.md / CONTINUATION.md with a narrative doc
 Delete `PROGRESS.md` and `CONTINUATION.md`. Create a single `DOCS/` (or `THE-STORY.md`)
 project document that:
 - **Tells the story** — why the app exists, its ideology, how we built it phase-by-phase.
@@ -189,11 +196,11 @@ project document that:
 
 ---
 
-## 5. Finished Work Index (for historical context until Phase 6)
+## 5. Finished Work Index (for historical context until Phase 7)
 
-- Topics 1–24 tracked in `PROGRESS.md` / `CONTINUATION.md` (will be deleted in Phase 6).
+- Topics 1–24 tracked in `PROGRESS.md` / `CONTINUATION.md` (will be deleted in Phase 7).
 - Topics 25 (deployment), 26 (prod architecture), 27 (capstone) are untouched — they map to
-  Phases 5/6 above.
+  Phases 6/7 above.
 - The Docker deploy phase (this work, commit `bd7f638`) made the full stack live, fixed
   Loki/Tempo healthchecks (static curl), otel-collector metrics, promtail config, OTLP tracing,
   and the Groq model rename. All 8 services verified healthy.
