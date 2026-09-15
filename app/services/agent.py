@@ -10,25 +10,28 @@ from openai.types.chat.chat_completion_message_function_tool_call import (
 )
 from openai.types.completion_usage import CompletionUsage
 
+from app.config import AGENT_MAX_STEPS, LLM_MAX_TOKENS, LLM_MODEL
 from app.services.llm import TOOL_MAP, TOOLS, client, iter_chunks, log_llm_usage
 from app.services.metrics import LLM_TOKENS, LLM_TTFT, measure_llm_call
 
 logger = logging.getLogger("app.services.agent")
 
 
-async def run_agent(question: str, max_steps: int = 5, max_tokens: int = 400) -> str:
+async def run_agent(
+    question: str, max_steps: int = AGENT_MAX_STEPS, max_tokens: int = LLM_MAX_TOKENS
+) -> str:
     messages: list[dict[str, object]] = [{"role": "user", "content": question}]
 
     for _step in range(max_steps):
-        with measure_llm_call(model="qwen/qwen3.8-27b", tools_enabled=True, segment="agent_round"):
+        with measure_llm_call(model=LLM_MODEL, tools_enabled=True, segment="agent_round"):
             response = await client.chat.completions.create(
-                model="qwen/qwen3.8-27b",
+                model=LLM_MODEL,
                 messages=messages,  # type: ignore[arg-type]
                 tools=TOOLS,
                 max_tokens=max_tokens,
             )
         if response.usage is not None:
-            LLM_TOKENS.labels(model="qwen/qwen3.8-27b", tools_enabled="true").inc(
+            LLM_TOKENS.labels(model=LLM_MODEL, tools_enabled="true").inc(
                 response.usage.total_tokens
             )
 
@@ -61,7 +64,7 @@ async def run_agent(question: str, max_steps: int = 5, max_tokens: int = 400) ->
 
 
 async def run_agent_stream(
-    question: str, max_steps: int = 5, max_tokens: int = 400
+    question: str, max_steps: int = AGENT_MAX_STEPS, max_tokens: int = LLM_MAX_TOKENS
 ) -> AsyncIterator[dict[str, object]]:
     messages: list[ChatCompletionMessageParam] = [{"role": "user", "content": question}]
 
@@ -69,11 +72,11 @@ async def run_agent_stream(
         tool_calls: dict[int, dict[str, str]] = {}
         usage: CompletionUsage | None = None
 
-        with measure_llm_call(model="qwen/qwen3.8-27b", tools_enabled=True, segment="agent_round"):
+        with measure_llm_call(model=LLM_MODEL, tools_enabled=True, segment="agent_round"):
             ttft_start = perf_counter()
             ttft_recorded = False
             stream: AsyncStream[ChatCompletionChunk] = await client.chat.completions.create(
-                model="qwen/qwen3.8-27b",
+                model=LLM_MODEL,
                 messages=messages,
                 tools=TOOLS,
                 max_tokens=max_tokens,
@@ -89,7 +92,7 @@ async def run_agent_stream(
                 if delta:
                     if delta.content:
                         if not ttft_recorded:
-                            LLM_TTFT.labels(model="qwen/qwen3.8-27b", segment="agent").observe(
+                            LLM_TTFT.labels(model=LLM_MODEL, segment="agent").observe(
                                 perf_counter() - ttft_start
                             )
                             ttft_recorded = True
@@ -107,7 +110,7 @@ async def run_agent_stream(
                     usage = chunk.usage
 
         if usage is not None:
-            LLM_TOKENS.labels(model="qwen/qwen3.8-27b", tools_enabled="true").inc(
+            LLM_TOKENS.labels(model=LLM_MODEL, tools_enabled="true").inc(
                 usage.total_tokens
             )
             log_llm_usage("agent_round", True, usage.total_tokens)

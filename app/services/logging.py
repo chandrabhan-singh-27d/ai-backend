@@ -6,6 +6,7 @@ from typing import cast
 
 from opentelemetry import trace
 
+from app.config import LOG_LEVEL
 from app.services.context import get_request_context
 
 
@@ -46,7 +47,9 @@ class JSONFormatter(logging.Formatter):
         return json.dumps(payload)
 
 
-def setup_logging(level: int = logging.INFO) -> None:
+def setup_logging(level: int | str = LOG_LEVEL) -> None:
+    if isinstance(level, str):
+        level = getattr(logging, level.upper(), logging.INFO)
     os.makedirs("logs", exist_ok=True)
 
     formatter = JSONFormatter()

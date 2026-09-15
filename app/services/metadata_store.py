@@ -82,5 +82,7 @@ _metadata_store: MetadataStore | None = None
 def get_metadata_store() -> MetadataStore:
     global _metadata_store
     if _metadata_store is None:
-        _metadata_store = MetadataStore()
+        from app.config import METADATA_DB_PATH
+
+        _metadata_store = MetadataStore(db_path=METADATA_DB_PATH)
     return _metadata_store

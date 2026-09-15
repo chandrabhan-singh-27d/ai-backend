@@ -11,6 +11,7 @@ from openai import AsyncOpenAI
 from pydantic import BaseModel, Field
 from qdrant_client import QdrantClient
 
+from app.config import EMBEDDING_DIM, EVAL_JUDGE_MODEL, GROQ_BASE_URL
 from app.services.embeddings import embed
 from app.services.rag import answer_question
 from app.services.vector_store import VectorStore
@@ -18,17 +19,16 @@ from app.services.vector_store import VectorStore
 EVAL_STORE = VectorStore(
     client=QdrantClient(path=":memory:"),
     collection="eval_documents",
-    vector_size=384,
+    vector_size=EMBEDDING_DIM,
 )
 
 load_dotenv()
 
 TOOLS_DIR = Path(__file__).parent
-JUDGE_MODEL = "qwen/qwen3.6-27b"
 
 judge_client = AsyncOpenAI(
     api_key=os.environ["GROQ_API_KEY"],
-    base_url="https://api.groq.com/openai/v1",
+    base_url=GROQ_BASE_URL,
 )
 
 
@@ -124,7 +124,7 @@ async def judge_answer(
     )
 
     response = await judge_client.chat.completions.create(
-        model=JUDGE_MODEL,
+        model=EVAL_JUDGE_MODEL,
         messages=[{"role": "user", "content": prompt}],
         temperature=0,
         max_tokens=150,

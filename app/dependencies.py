@@ -3,6 +3,7 @@ from typing import Annotated
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from app.config import RATE_LIMIT_MAX_REQUESTS, RATE_LIMIT_WINDOW_SECONDS
 from app.services.api_keys import get_api_keys_store
 from app.services.metrics import AUTH_FAILURES
 from app.services.rate_limiter import RateLimiter
@@ -10,7 +11,7 @@ from app.services.rate_limiter import RateLimiter
 bearer_scheme = HTTPBearer(auto_error=False)
 ApiKeyCredentials = Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)]
 
-limiter = RateLimiter(limit=60, window_seconds=60)
+limiter = RateLimiter(limit=RATE_LIMIT_MAX_REQUESTS, window_seconds=RATE_LIMIT_WINDOW_SECONDS)
 
 
 def require_api_key(

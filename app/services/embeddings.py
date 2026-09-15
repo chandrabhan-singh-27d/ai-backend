@@ -1,6 +1,8 @@
 from sentence_transformers import SentenceTransformer
 
-_model = SentenceTransformer("all-MiniLM-L6-v2")  # pyright: ignore[reportUnknownMemberType]
+from app.config import EMBEDDING_MODEL
+
+_model = SentenceTransformer(EMBEDDING_MODEL)  # pyright: ignore[reportUnknownMemberType]
 
 
 def embed(texts: list[str]) -> list[list[float]]:

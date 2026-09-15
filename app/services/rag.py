@@ -1,6 +1,7 @@
 import logging
 from typing import TypedDict
 
+from app.config import RAG_TOP_K
 from app.services.embeddings import embed
 from app.services.llm import chat
 from app.services.tracing import get_tracer
@@ -34,7 +35,7 @@ async def answer_question(question: str, store: VectorStore | None = None) -> st
         store = store or get_store()
 
         with tracer.start_as_current_span("store.search"):
-            searched_documents = store.search(query_embedding, top_k=3)
+            searched_documents = store.search(query_embedding, top_k=RAG_TOP_K)
 
         logger.info(
             "rag_retrieval",

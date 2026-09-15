@@ -16,6 +16,13 @@ from openai.types.chat.chat_completion_message_function_tool_call import (
 )
 from openai.types.completion_usage import CompletionUsage
 
+from app.config import (
+    GROQ_BASE_URL,
+    LLM_MAX_TOKENS,
+    LLM_MODEL,
+    LLM_REASONING_EFFORT,
+    LLM_REASONING_FORMAT,
+)
 from app.services.embeddings import embed
 from app.services.metrics import LLM_TOKENS, LLM_TTFT, measure_llm_call
 from app.services.tools import calculate
@@ -23,7 +30,7 @@ from app.services.vector_store import get_store
 
 logger = logging.getLogger("app.services.llm")
 
-client = AsyncOpenAI(api_key=os.environ["GROQ_API_KEY"], base_url="https://api.groq.com/openai/v1")
+client = AsyncOpenAI(api_key=os.environ["GROQ_API_KEY"], base_url=GROQ_BASE_URL)
 
 
 def log_llm_usage(segment: str, tools_enabled: bool, total_tokens: int) -> None:
@@ -32,7 +39,7 @@ def log_llm_usage(segment: str, tools_enabled: bool, total_tokens: int) -> None:
         extra={
             "extra_fields": {
                 "segment": segment,
-                "model": "qwen/qwen3.8-27b",
+                "model": LLM_MODEL,
                 "tools_enabled": "true" if tools_enabled else "false",
                 "tokens": total_tokens,
             }
@@ -58,31 +65,37 @@ def _strip_reasoning(content: str) -> str:
     return content
 
 
-async def chat(message: str, tools_enabled: bool = False, max_tokens: int = 400) -> str:
+async def chat(message: str, tools_enabled: bool = False, max_tokens: int = LLM_MAX_TOKENS) -> str:
     if tools_enabled:
-        with measure_llm_call(model="qwen/qwen3.8-27b", tools_enabled=True, segment="tool_round"):
+        with measure_llm_call(model=LLM_MODEL, tools_enabled=True, segment="tool_round"):
             response = await client.chat.completions.create(
-                model="qwen/qwen3.8-27b",
+                model=LLM_MODEL,
                 messages=[{"role": "user", "content": message}],
                 tools=TOOLS,
                 max_tokens=max_tokens,
-                extra_body={"reasoning_format": "hidden", "reasoning_effort": "none"},
+                extra_body={
+                    "reasoning_format": LLM_REASONING_FORMAT,
+                    "reasoning_effort": LLM_REASONING_EFFORT,
+                },
             )
         if response.usage is not None:
-            LLM_TOKENS.labels(model="qwen/qwen3.8-27b", tools_enabled="true").inc(
+            LLM_TOKENS.labels(model=LLM_MODEL, tools_enabled="true").inc(
                 response.usage.total_tokens
             )
         _log_llm_call("tool_round", True, response)
     else:
-        with measure_llm_call(model="qwen/qwen3.8-27b", tools_enabled=False, segment="final"):
+        with measure_llm_call(model=LLM_MODEL, tools_enabled=False, segment="final"):
             response = await client.chat.completions.create(
-                model="qwen/qwen3.8-27b",
+                model=LLM_MODEL,
                 messages=[{"role": "user", "content": message}],
                 max_tokens=max_tokens,
-                extra_body={"reasoning_format": "hidden", "reasoning_effort": "none"},
+                extra_body={
+                    "reasoning_format": LLM_REASONING_FORMAT,
+                    "reasoning_effort": LLM_REASONING_EFFORT,
+                },
             )
         if response.usage is not None:
-            LLM_TOKENS.labels(model="qwen/qwen3.8-27b", tools_enabled="false").inc(
+            LLM_TOKENS.labels(model=LLM_MODEL, tools_enabled="false").inc(
                 response.usage.total_tokens
             )
         _log_llm_call("final", False, response)
@@ -111,15 +124,18 @@ async def chat(message: str, tools_enabled: bool = False, max_tokens: int = 400)
             {"role": "tool", "tool_call_id": tool_call.id, "content": str(result)},
         ]
 
-        with measure_llm_call(model="qwen/qwen3.8-27b", tools_enabled=True, segment="final"):
+        with measure_llm_call(model=LLM_MODEL, tools_enabled=True, segment="final"):
             final = await client.chat.completions.create(
-                model="qwen/qwen3.8-27b",
+                model=LLM_MODEL,
                 messages=messages,  # type: ignore[arg-type]
-                max_tokens=400,
-                extra_body={"reasoning_format": "hidden", "reasoning_effort": "none"},
+                max_tokens=LLM_MAX_TOKENS,
+                extra_body={
+                    "reasoning_format": LLM_REASONING_FORMAT,
+                    "reasoning_effort": LLM_REASONING_EFFORT,
+                },
             )
         if final.usage is not None:
-            LLM_TOKENS.labels(model="qwen/qwen3.8-27b", tools_enabled="true").inc(
+            LLM_TOKENS.labels(model=LLM_MODEL, tools_enabled="true").inc(
                 final.usage.total_tokens
             )
         _log_llm_call("final", True, final)
@@ -134,16 +150,16 @@ async def chat_stream(
         tool_calls: dict[int, dict[str, str]] = {}
         tool_round_usage: CompletionUsage | None = None
 
-        with measure_llm_call(model="qwen/qwen3.8-27b", tools_enabled=True, segment="tool_round"):
+        with measure_llm_call(model=LLM_MODEL, tools_enabled=True, segment="tool_round"):
             stream = await client.chat.completions.create(
-                model="qwen/qwen3.8-27b",
+                model=LLM_MODEL,
                 messages=[{"role": "user", "content": message}],
                 tools=TOOLS,
                 max_tokens=max_tokens,
                 stream=True,
                 extra_body={
-                    "reasoning_format": "hidden",
-                    "reasoning_effort": "none",
+                    "reasoning_format": LLM_REASONING_FORMAT,
+                    "reasoning_effort": LLM_REASONING_EFFORT,
                     "stream_options": {"include_usage": True},
                 },
             )
@@ -159,7 +175,7 @@ async def chat_stream(
                     tool_round_usage = chunk.usage
 
         if tool_round_usage is not None:
-            LLM_TOKENS.labels(model="qwen/qwen3.8-27b", tools_enabled="true").inc(
+            LLM_TOKENS.labels(model=LLM_MODEL, tools_enabled="true").inc(
                 tool_round_usage.total_tokens
             )
             log_llm_usage("tool_round", True, tool_round_usage.total_tokens)
@@ -190,17 +206,17 @@ async def chat_stream(
         ]
 
         final_usage: CompletionUsage | None = None
-        with measure_llm_call(model="qwen/qwen3.8-27b", tools_enabled=True, segment="final"):
+        with measure_llm_call(model=LLM_MODEL, tools_enabled=True, segment="final"):
             ttft_start = perf_counter()
             ttft_recorded = False
             final: AsyncStream[ChatCompletionChunk] = await client.chat.completions.create(
-                model="qwen/qwen3.8-27b",
+                model=LLM_MODEL,
                 messages=messages,
                 max_tokens=max_tokens,
                 stream=True,
                 extra_body={
-                    "reasoning_format": "hidden",
-                    "reasoning_effort": "none",
+                    "reasoning_format": LLM_REASONING_FORMAT,
+                    "reasoning_effort": LLM_REASONING_EFFORT,
                     "stream_options": {"include_usage": True},
                 },
             )
@@ -208,7 +224,7 @@ async def chat_stream(
                 delta = chunk.choices[0].delta if chunk.choices else None
                 if delta and delta.content:
                     if not ttft_recorded:
-                        LLM_TTFT.labels(model="qwen/qwen3.8-27b", segment="final").observe(
+                        LLM_TTFT.labels(model=LLM_MODEL, segment="final").observe(
                             perf_counter() - ttft_start
                         )
                         ttft_recorded = True
@@ -217,23 +233,23 @@ async def chat_stream(
                     final_usage = chunk.usage
 
         if final_usage is not None:
-            LLM_TOKENS.labels(model="qwen/qwen3.8-27b", tools_enabled="true").inc(
+            LLM_TOKENS.labels(model=LLM_MODEL, tools_enabled="true").inc(
                 final_usage.total_tokens
             )
             log_llm_usage("final", True, final_usage.total_tokens)
     else:
         final_usage: CompletionUsage | None = None
-        with measure_llm_call(model="qwen/qwen3.8-27b", tools_enabled=False, segment="final"):
+        with measure_llm_call(model=LLM_MODEL, tools_enabled=False, segment="final"):
             ttft_start = perf_counter()
             ttft_recorded = False
             stream = await client.chat.completions.create(
-                model="qwen/qwen3.8-27b",
+                model=LLM_MODEL,
                 messages=[{"role": "user", "content": message}],
                 max_tokens=max_tokens,
                 stream=True,
                 extra_body={
-                    "reasoning_format": "hidden",
-                    "reasoning_effort": "none",
+                    "reasoning_format": LLM_REASONING_FORMAT,
+                    "reasoning_effort": LLM_REASONING_EFFORT,
                     "stream_options": {"include_usage": True},
                 },
             )
@@ -241,7 +257,7 @@ async def chat_stream(
                 delta = chunk.choices[0].delta if chunk.choices else None
                 if delta and delta.content:
                     if not ttft_recorded:
-                        LLM_TTFT.labels(model="qwen/qwen3.8-27b", segment="final").observe(
+                        LLM_TTFT.labels(model=LLM_MODEL, segment="final").observe(
                             perf_counter() - ttft_start
                         )
                         ttft_recorded = True
@@ -250,7 +266,7 @@ async def chat_stream(
                     final_usage = chunk.usage
 
         if final_usage is not None:
-            LLM_TOKENS.labels(model="qwen/qwen3.8-27b", tools_enabled="false").inc(
+            LLM_TOKENS.labels(model=LLM_MODEL, tools_enabled="false").inc(
                 final_usage.total_tokens
             )
             log_llm_usage("final", False, final_usage.total_tokens)

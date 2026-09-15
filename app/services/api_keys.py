@@ -78,5 +78,7 @@ _api_keys_store: ApiKeysStore | None = None
 def get_api_keys_store() -> ApiKeysStore:
     global _api_keys_store
     if _api_keys_store is None:
-        _api_keys_store = ApiKeysStore()
+        from app.config import KEYS_DB_PATH
+
+        _api_keys_store = ApiKeysStore(db_path=KEYS_DB_PATH)
     return _api_keys_store

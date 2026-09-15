@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+from app.config import LLM_MAX_TOKENS, LLM_MODEL
 from app.dependencies import PROTECTED
 from app.services.agent import run_agent, run_agent_stream
 from app.services.agent_graph import run_agent_graph
@@ -24,7 +25,7 @@ async def _frame(events: AsyncIterator[dict[str, object]]) -> AsyncIterator[str]
 class ChatRequest(BaseModel):
     message: str
     stream: bool = False
-    max_tokens: int = 400
+    max_tokens: int = LLM_MAX_TOKENS
 
 
 class ChatResponse(BaseModel):
@@ -35,7 +36,7 @@ class ChatResponse(BaseModel):
 class ToolChatRequest(BaseModel):
     message: str
     stream: bool = False
-    max_tokens: int = 400
+    max_tokens: int = LLM_MAX_TOKENS
 
 
 class ToolChatResponse(BaseModel):
@@ -46,7 +47,7 @@ class ToolChatResponse(BaseModel):
 class AgentRequest(BaseModel):
     question: str
     stream: bool = False
-    max_tokens: int = 400
+    max_tokens: int = LLM_MAX_TOKENS
 
 
 class AgentResponse(BaseModel):
@@ -71,7 +72,7 @@ async def chat_endpoint(request: ChatRequest) -> ChatResponse | StreamingRespons
         )
     try:
         content = await chat(request.message, max_tokens=request.max_tokens)
-        return ChatResponse(response=content, model="qwen/qwen3.8-27b")
+        return ChatResponse(response=content, model=LLM_MODEL)
     except Exception as e:
         logger.exception("chat_endpoint_failed")
         raise HTTPException(status_code=502, detail=str(e)) from e

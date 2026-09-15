@@ -9,6 +9,7 @@ from openai.types.chat.chat_completion_message_function_tool_call import (
     ChatCompletionMessageFunctionToolCall,
 )
 
+from app.config import AGENT_GRAPH_RECURSION_LIMIT, LLM_MODEL
 from app.services.llm import TOOL_MAP, TOOLS, client
 from app.services.metrics import LLM_TOKENS, measure_llm_call
 
@@ -20,14 +21,14 @@ class AgentState(TypedDict):
 
 
 async def call_llm(state: AgentState) -> dict[str, list[dict[str, object]]]:
-    with measure_llm_call(model="qwen/qwen3.8-27b", tools_enabled=True, segment="agent_graph"):
+    with measure_llm_call(model=LLM_MODEL, tools_enabled=True, segment="agent_graph"):
         response = await client.chat.completions.create(
-            model="qwen/qwen3.8-27b",
+            model=LLM_MODEL,
             messages=state["messages"],  # type: ignore[arg-type]
             tools=TOOLS,
         )
     if response.usage is not None:
-        LLM_TOKENS.labels(model="qwen/qwen3.8-27b", tools_enabled="true").inc(
+        LLM_TOKENS.labels(model=LLM_MODEL, tools_enabled="true").inc(
             response.usage.total_tokens
         )
 
@@ -98,7 +99,8 @@ graph = builder.compile()
 
 async def run_agent_graph(question: str) -> str:
     result = await graph.ainvoke(
-        {"messages": [{"role": "user", "content": question}]}, config={"recursion_limit": 10}
+        {"messages": [{"role": "user", "content": question}]},
+        config={"recursion_limit": AGENT_GRAPH_RECURSION_LIMIT},
     )
     messages = cast("list[dict[str, object]]", result["messages"])
     content = messages[-1].get("content")

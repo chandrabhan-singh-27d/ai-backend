@@ -104,5 +104,7 @@ _job_store: JobStore | None = None
 def get_job_store() -> JobStore:
     global _job_store
     if _job_store is None:
-        _job_store = JobStore()
+        from app.config import JOBS_DB_PATH
+
+        _job_store = JobStore(db_path=JOBS_DB_PATH)
     return _job_store
