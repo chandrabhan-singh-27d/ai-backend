@@ -40,6 +40,39 @@ docker compose down
 docker compose down -v --rmi all --remove-orphans
 ```
 
+### Build cache & clean rebuilds
+
+Dependencies are installed with uv using BuildKit cache mounts: uv's download/build caches
+live on the host, so rebuilds reuse deps (npm-ci style) instead of re-downloading all ~474
+transitive packages (the PyTorch / sentence-transformers stack).
+
+```bash
+# Normal rebuild — fast, deps served from the host-side uv cache
+docker compose up -d --build
+
+# Inspect what's taking disk space
+docker system df
+
+# Selective cache cleanup (safe: keeps containers, images, volumes, and data/)
+docker builder prune -af          # clears build cache incl. the uv cache mounts
+docker image prune -af            # clears unused/old images
+
+# Full clean rebuild — nothing stale picked up, data still kept
+docker compose down               # stop (keeps data/ + qdrant_storage/)
+docker builder prune -af
+docker image prune -af
+docker compose build --no-cache --pull   # fresh layers + latest base images
+docker compose up -d
+```
+
+- After `docker builder prune`, the next build does the full one-time dependency download
+  (~5–10 min). uv's cache is content-addressed, so reuse is always safe; only Docker layers
+  and images can go stale — cleared by `--no-cache --pull`.
+- The uv caches are host-side mount caches, never baked into image layers, so images stay
+  small and cache growth stays bounded.
+- `data/`, `qdrant_storage/`, and `logs/` are host bind mounts — they survive every command
+  above. Only `docker compose down -v` removes them (see warning below).
+
 ### Docker Desktop
 
 Containers auto-restart when Docker Desktop launches. To manage they stack manually:
