@@ -16,3 +16,5 @@ CONTINUATION.md
 .github
 .vscode
 .ruff_cache
+AGENTS.md
+*.md
