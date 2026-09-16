@@ -23,7 +23,7 @@ from app.config import (
     LLM_REASONING_EFFORT,
     LLM_REASONING_FORMAT,
 )
-from app.services.embeddings import embed
+from app.services.embeddings import embed_sync
 from app.services.metrics import LLM_TOKENS, LLM_TTFT, measure_llm_call
 from app.services.tools import calculate
 from app.services.vector_store import get_store
@@ -275,7 +275,7 @@ async def chat_stream(
 
 
 def _search_documents(query: str, top_k: int = 3) -> str:
-    query_embedding = embed([query])[0]
+    query_embedding = embed_sync([query])[0]
     results = get_store().search(query_embedding, top_k=top_k)
     if not results:
         return "No results."

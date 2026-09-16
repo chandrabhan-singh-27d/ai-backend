@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 from qdrant_client import QdrantClient
 
 from app.config import EMBEDDING_DIM, EVAL_JUDGE_MODEL, GROQ_BASE_URL
-from app.services.embeddings import embed
+from app.services.embeddings import embed_sync
 from app.services.rag import answer_question
 from app.services.vector_store import VectorStore
 
@@ -60,7 +60,7 @@ class CaseResult(BaseModel):
 
 def seed_store() -> None:
     corpus: list[CorpusDoc] = json.loads((TOOLS_DIR / "corpus.json").read_text())
-    embeddings = embed([doc["text"] for doc in corpus])
+    embeddings = embed_sync([doc["text"] for doc in corpus])
     for doc, emb in zip(corpus, embeddings, strict=True):
         EVAL_STORE.add(doc_id=doc["id"], text=doc["text"], embedding=emb)
 
@@ -135,7 +135,7 @@ async def judge_answer(
 
 
 async def run_case(case: EvalCase) -> CaseResult:
-    query_embedding = embed([case["question"]])[0]
+    query_embedding = embed_sync([case["question"]])[0]
     retrieved = EVAL_STORE.search(query_embedding, top_k=3)
     retrieved_ids = [r["id"] for r in retrieved]
 

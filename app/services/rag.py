@@ -31,7 +31,7 @@ async def answer_question(question: str, store: VectorStore | None = None) -> st
     tracer = get_tracer()
     with tracer.start_as_current_span("answer_question"):
         with tracer.start_as_current_span("embedding"):
-            query_embedding = embed([question])[0]
+            query_embedding = (await embed([question]))[0]
         store = store or get_store()
 
         with tracer.start_as_current_span("store.search"):

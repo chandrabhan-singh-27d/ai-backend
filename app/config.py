@@ -14,9 +14,14 @@ AGENT_GRAPH_RECURSION_LIMIT = int(os.getenv("AGENT_GRAPH_RECURSION_LIMIT", "10")
 # --- RAG ---
 RAG_TOP_K = int(os.getenv("RAG_TOP_K", "3"))
 
-# --- Embeddings ---
+# --- Embeddings (Hugging Face Inference API, no local torch) ---
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
 EMBEDDING_DIM = int(os.getenv("EMBEDDING_DIM", "384"))
+HF_TOKEN = os.getenv("HF_TOKEN", "")
+HF_EMBEDDINGS_URL = os.getenv(
+    "HF_EMBEDDINGS_URL",
+    f"https://api-inference.huggingface.co/pipeline/feature-extraction/{EMBEDDING_MODEL}",
+)
 
 # --- Vector store (Qdrant) ---
 QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")

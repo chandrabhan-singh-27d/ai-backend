@@ -54,8 +54,8 @@ def ingest_document(request: IngestRequest) -> dict[str, str]:
 
 
 @router.post("/search")
-def search_documents(request: SearchRequest) -> list[SearchResult]:
-    query_embedding = embed([request.query])[0]
+async def search_documents(request: SearchRequest) -> list[SearchResult]:
+    query_embedding = (await embed([request.query]))[0]
     results = get_store().search(query_embedding, top_k=request.top_k)
     return [SearchResult(**r) for r in results]
 
