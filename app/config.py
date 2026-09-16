@@ -15,12 +15,12 @@ AGENT_GRAPH_RECURSION_LIMIT = int(os.getenv("AGENT_GRAPH_RECURSION_LIMIT", "10")
 RAG_TOP_K = int(os.getenv("RAG_TOP_K", "3"))
 
 # --- Embeddings (Hugging Face Inference API, no local torch) ---
-EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
+EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
 EMBEDDING_DIM = int(os.getenv("EMBEDDING_DIM", "384"))
 HF_TOKEN = os.getenv("HF_TOKEN", "")
 HF_EMBEDDINGS_URL = os.getenv(
     "HF_EMBEDDINGS_URL",
-    f"https://api-inference.huggingface.co/pipeline/feature-extraction/{EMBEDDING_MODEL}",
+    f"https://router.huggingface.co/hf-inference/models/{EMBEDDING_MODEL}/pipeline/feature-extraction",
 )
 
 # --- Vector store (Qdrant) ---
@@ -40,4 +40,4 @@ RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "60"))
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
 # --- Eval (tools/run_eval.py) ---
-EVAL_JUDGE_MODEL = os.getenv("EVAL_JUDGE_MODEL", LLM_MODEL)
+EVAL_JUDGE_MODEL = os.getenv("EVAL_JUDGE_MODEL", "openai/gpt-oss-120b")
