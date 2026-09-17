@@ -10,7 +10,13 @@ from openai.types.chat.chat_completion_message_function_tool_call import (
 )
 from openai.types.completion_usage import CompletionUsage
 
-from app.config import AGENT_MAX_STEPS, LLM_MAX_TOKENS, LLM_MODEL
+from app.config import (
+    AGENT_MAX_STEPS,
+    LLM_MAX_TOKENS,
+    LLM_MODEL,
+    LLM_REASONING_EFFORT,
+    LLM_REASONING_FORMAT,
+)
 from app.services.llm import TOOLS, call_tool, client, iter_chunks, log_llm_usage
 from app.services.metrics import LLM_TOKENS, LLM_TTFT, measure_llm_call
 
@@ -29,6 +35,10 @@ async def run_agent(
                 messages=messages,  # type: ignore[arg-type]
                 tools=TOOLS,
                 max_tokens=max_tokens,
+                extra_body={
+                    "reasoning_format": LLM_REASONING_FORMAT,
+                    "reasoning_effort": LLM_REASONING_EFFORT,
+                },
             )
         if response.usage is not None:
             LLM_TOKENS.labels(model=LLM_MODEL, tools_enabled="true").inc(
@@ -82,8 +92,8 @@ async def run_agent_stream(
                 max_tokens=max_tokens,
                 stream=True,
                 extra_body={
-                    "reasoning_format": "hidden",
-                    "reasoning_effort": "none",
+                    "reasoning_format": LLM_REASONING_FORMAT,
+                    "reasoning_effort": LLM_REASONING_EFFORT,
                     "stream_options": {"include_usage": True},
                 },
             )

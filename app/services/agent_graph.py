@@ -10,7 +10,13 @@ from openai.types.chat.chat_completion_message_function_tool_call import (
     ChatCompletionMessageFunctionToolCall,
 )
 
-from app.config import AGENT_GRAPH_RECURSION_LIMIT, LLM_MAX_TOKENS, LLM_MODEL
+from app.config import (
+    AGENT_GRAPH_RECURSION_LIMIT,
+    LLM_MAX_TOKENS,
+    LLM_MODEL,
+    LLM_REASONING_EFFORT,
+    LLM_REASONING_FORMAT,
+)
 from app.services.llm import TOOLS, call_tool, client
 from app.services.metrics import LLM_TOKENS, measure_llm_call
 
@@ -29,6 +35,10 @@ def _build_graph(max_tokens: int = LLM_MAX_TOKENS):
                 messages=state["messages"],  # type: ignore[arg-type]
                 tools=TOOLS,
                 max_tokens=max_tokens,
+                extra_body={
+                    "reasoning_format": LLM_REASONING_FORMAT,
+                    "reasoning_effort": LLM_REASONING_EFFORT,
+                },
             )
         if response.usage is not None:
             LLM_TOKENS.labels(model=LLM_MODEL, tools_enabled="true").inc(

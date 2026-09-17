@@ -7,7 +7,7 @@ from app.services.embeddings import cosine_similarity, embed
 router = APIRouter(dependencies=PROTECTED)
 
 
-class EmbedRequst(BaseModel):
+class EmbedRequest(BaseModel):
     texts: list[str]
 
 
@@ -27,7 +27,7 @@ class SimilarityResponse(BaseModel):
 
 
 @router.post("/embeddings", response_model=EmbedResponse)
-async def create_embeddings(request: EmbedRequst) -> EmbedResponse:
+async def create_embeddings(request: EmbedRequest) -> EmbedResponse:
     return EmbedResponse(embeddings=await embed(request.texts))
 
 

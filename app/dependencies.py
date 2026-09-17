@@ -23,7 +23,7 @@ def require_api_key(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or missing API Key",
-            headers={"WWW-Authenticated": "Bearer"},
+            headers={"WWW-Authenticate": "Bearer"},
         )
     key = get_api_keys_store().find(credentials.credentials)
 

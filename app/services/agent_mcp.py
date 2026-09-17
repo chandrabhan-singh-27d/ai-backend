@@ -12,7 +12,14 @@ from openai.types.chat.chat_completion_message_function_tool_call import (
     ChatCompletionMessageFunctionToolCall,
 )
 
-from app.config import AGENT_MAX_STEPS, GROQ_BASE_URL, LLM_MAX_TOKENS, LLM_MODEL
+from app.config import (
+    AGENT_MAX_STEPS,
+    GROQ_BASE_URL,
+    LLM_MAX_TOKENS,
+    LLM_MODEL,
+    LLM_REASONING_EFFORT,
+    LLM_REASONING_FORMAT,
+)
 from app.services.metrics import LLM_TOKENS, measure_llm_call
 
 logger = logging.getLogger("app.services.agent_mcp")
@@ -71,6 +78,10 @@ async def run_mcp_agent(
                     messages=messages,  # type: ignore[arg-type]
                     tools=openai_tools,  # type: ignore[arg-type]
                     max_tokens=max_tokens,
+                    extra_body={
+                        "reasoning_format": LLM_REASONING_FORMAT,
+                        "reasoning_effort": LLM_REASONING_EFFORT,
+                    },
                 )
             if response.usage is not None:
                 LLM_TOKENS.labels(model=LLM_MODEL, tools_enabled="true").inc(

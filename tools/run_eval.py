@@ -11,7 +11,13 @@ from openai import AsyncOpenAI
 from pydantic import BaseModel, Field
 from qdrant_client import QdrantClient
 
-from app.config import EMBEDDING_DIM, EVAL_JUDGE_MODEL, GROQ_BASE_URL
+from app.config import (
+    EMBEDDING_DIM,
+    EVAL_JUDGE_MODEL,
+    GROQ_BASE_URL,
+    LLM_REASONING_EFFORT,
+    LLM_REASONING_FORMAT,
+)
 from app.services.embeddings import embed
 from app.services.rag import answer_question
 from app.services.vector_store import VectorStore
@@ -128,7 +134,10 @@ async def judge_answer(
         messages=[{"role": "user", "content": prompt}],
         temperature=0,
         max_tokens=150,
-        extra_body={"reasoning_format": "hidden", "reasoning_effort": "none"},
+        extra_body={
+            "reasoning_format": LLM_REASONING_FORMAT,
+            "reasoning_effort": LLM_REASONING_EFFORT,
+        },
     )
     content = response.choices[0].message.content or "{}"
     return parse_verdict(content)
