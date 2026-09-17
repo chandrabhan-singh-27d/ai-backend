@@ -11,24 +11,24 @@ from openai import AsyncOpenAI
 from pydantic import BaseModel, Field
 from qdrant_client import QdrantClient
 
-from app.config import (
+load_dotenv()
+
+from app.config import (  # noqa: E402
     EMBEDDING_DIM,
     EVAL_JUDGE_MODEL,
+    EVAL_JUDGE_REASONING_EFFORT,
     GROQ_BASE_URL,
-    LLM_REASONING_EFFORT,
     LLM_REASONING_FORMAT,
 )
-from app.services.embeddings import embed
-from app.services.rag import answer_question
-from app.services.vector_store import VectorStore
+from app.services.embeddings import embed  # noqa: E402
+from app.services.rag import answer_question  # noqa: E402
+from app.services.vector_store import VectorStore  # noqa: E402
 
 EVAL_STORE = VectorStore(
     client=QdrantClient(path=":memory:"),
     collection="eval_documents",
     vector_size=EMBEDDING_DIM,
 )
-
-load_dotenv()
 
 TOOLS_DIR = Path(__file__).parent
 
@@ -136,7 +136,7 @@ async def judge_answer(
         max_tokens=150,
         extra_body={
             "reasoning_format": LLM_REASONING_FORMAT,
-            "reasoning_effort": LLM_REASONING_EFFORT,
+            "reasoning_effort": EVAL_JUDGE_REASONING_EFFORT,
         },
     )
     content = response.choices[0].message.content or "{}"

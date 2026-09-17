@@ -41,3 +41,5 @@ LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
 # --- Eval (tools/run_eval.py) ---
 EVAL_JUDGE_MODEL = os.getenv("EVAL_JUDGE_MODEL", "openai/gpt-oss-120b")
+# gpt-oss accepts only low/medium/high (unlike qwen's none)
+EVAL_JUDGE_REASONING_EFFORT = os.getenv("EVAL_JUDGE_REASONING_EFFORT", "low")
