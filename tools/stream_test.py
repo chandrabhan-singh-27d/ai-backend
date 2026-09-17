@@ -1,14 +1,28 @@
 import asyncio
 import json
+import os
 
 import httpx
 
 from app.main import app
 
 
-async def _dump(client: httpx.AsyncClient, path: str, body: dict[str, object]) -> None:
+def _auth_headers() -> dict[str, str]:
+    key = os.environ.get("API_KEY")
+    if not key:
+        raise SystemExit(
+            "API_KEY env var required; create one with 'tools/manage_keys.py create <name>'"
+        )
+    return {"Authorization": f"Bearer {key}"}
+
+
+async def _dump(
+    client: httpx.AsyncClient, path: str, body: dict[str, object]
+) -> None:
     print(f"\n=== POST {path} {body}")
-    async with client.stream("POST", path, json=body) as response:
+    async with client.stream(
+        "POST", path, json=body, headers=_auth_headers()
+    ) as response:
         print("status:", response.status_code, response.headers.get("content-type"))
         async for line in response.aiter_lines():
             stripped = line.strip()
