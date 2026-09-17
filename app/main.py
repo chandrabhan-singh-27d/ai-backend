@@ -1,19 +1,31 @@
 # pyright: reportMissingTypeStubs=false
-import asyncio
-from collections.abc import AsyncGenerator
-from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
-from fastapi import FastAPI
-from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-
-from app.middlewares.request_context import request_context_middleware
-from app.routers import chat, demo, documents, embeddings, health, jobs, metrics, models, rag
-from app.services.logging import setup_logging
-from app.services.tracing import setup_tracing
-from app.services.worker import run_worker_loop
 
 load_dotenv()
+
+import asyncio  # noqa: E402
+from collections.abc import AsyncGenerator  # noqa: E402
+from contextlib import asynccontextmanager  # noqa: E402
+
+from fastapi import FastAPI  # noqa: E402
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor  # noqa: E402
+
+from app.middlewares.request_context import request_context_middleware  # noqa: E402
+from app.routers import (  # noqa: E402
+    chat,
+    demo,
+    documents,
+    embeddings,
+    health,
+    jobs,
+    metrics,
+    models,
+    rag,
+)
+from app.services.logging import setup_logging  # noqa: E402
+from app.services.tracing import setup_tracing  # noqa: E402
+from app.services.worker import run_worker_loop  # noqa: E402
 
 
 @asynccontextmanager
