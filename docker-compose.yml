@@ -9,6 +9,9 @@ services:
     environment:
       - QDRANT_URL=http://qdrant:6333
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+      # single uvicorn worker: keep RATE_LIMIT_STRATEGY=memory (in-process).
+      # For multiple workers set RATE_LIMIT_STRATEGY=redis + REDIS_URL.
+      - RATE_LIMIT_STRATEGY=memory
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs

@@ -40,6 +40,10 @@ MODELS_DB_PATH = os.getenv("MODELS_DB_PATH", "data/models.db")
 # --- Auth / rate limiting ---
 RATE_LIMIT_MAX_REQUESTS = int(os.getenv("RATE_LIMIT_MAX_REQUESTS", "60"))
 RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "60"))
+# "memory" is per-process (valid for a single uvicorn worker); "redis" shares state
+# across workers via REDIS_URL (fixed-window counters).
+RATE_LIMIT_STRATEGY = os.getenv("RATE_LIMIT_STRATEGY", "memory")
+REDIS_URL = os.getenv("REDIS_URL", "")
 
 # --- Logging ---
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
