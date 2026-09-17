@@ -1,3 +1,5 @@
+import hashlib
+
 import anyio
 from dotenv import load_dotenv
 from mcp import types
@@ -119,18 +121,29 @@ async def handle_call_tool(
 
     if name == "add_document":
         from app.services.embeddings import embed
+        from app.services.metadata_store import get_metadata_store
 
         embedding = (await embed([args["text"]]))[0]
         get_store().add(doc_id=args["doc_id"], text=args["text"], embedding=embedding)
+        get_metadata_store().add_document(
+            doc_id=args["doc_id"],
+            title=args["doc_id"],
+            source="mcp",
+            content_hash=hashlib.sha256(args["text"].encode()).hexdigest(),
+            chunk_count=1,
+        )
         return _text(f"Document '{args['doc_id']}' added.")
 
     if name == "delete_document":
+        from app.services.metadata_store import get_metadata_store
+
         if not get_store().exists(args["doc_id"]):
             return _text(
                 f"Document '{args['doc_id']}' not found.",
                 is_error=True,
             )
         get_store().delete(args["doc_id"])
+        get_metadata_store().delete_document(doc_id=args["doc_id"])
         return _text(f"Document '{args['doc_id']}' deleted.")
 
     return _text("Unknown tool.", is_error=True)
