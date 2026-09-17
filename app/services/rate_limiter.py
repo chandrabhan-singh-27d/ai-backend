@@ -1,5 +1,6 @@
 import time
 from collections import defaultdict, deque
+from typing import Any, cast
 
 
 class RateLimiter:
@@ -30,9 +31,11 @@ class RedisRateLimiter(RateLimiter):
     def __init__(self, limit: int, window_seconds: int, redis_url: str = "") -> None:
         self.limit = limit
         self.window_seconds = window_seconds
+        self._client: Any
         import redis
 
-        self._client = redis.Redis.from_url(redis_url or "redis://localhost:6379")
+        redis_client = cast(Any, redis.Redis)
+        self._client = redis_client.from_url(redis_url or "redis://localhost:6379")
 
     def allow(self, key: str) -> tuple[bool, int]:
         window_key = f"rate:{key}:{int(time.time()) // self.window_seconds}"

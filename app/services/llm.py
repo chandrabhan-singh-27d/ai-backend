@@ -1,9 +1,10 @@
-import asyncio
+import inspect
 import json
 import logging
 import os
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from time import perf_counter
+from typing import Any
 
 from openai import AsyncOpenAI, AsyncStream
 from openai.types.chat import (
@@ -295,9 +296,9 @@ def _list_documents() -> str:
     return "\n".join(f"- [{doc['id']}] {doc['text'][:80]}" for doc in docs)
 
 
-async def call_tool(name: str, **kwargs) -> str:
+async def call_tool(name: str, **kwargs: object) -> str:
     fn = TOOL_MAP[name]
-    result = await fn(**kwargs) if asyncio.iscoroutinefunction(fn) else fn(**kwargs)
+    result = await fn(**kwargs) if inspect.iscoroutinefunction(fn) else fn(**kwargs)
     return str(result)
 
 
@@ -344,7 +345,7 @@ TOOLS: list[ChatCompletionToolParam] = [
     ),
 ]
 
-TOOL_MAP = {
+TOOL_MAP: dict[str, Callable[..., Any]] = {
     "calculate": calculate,
     "search_documents": _search_documents,
     "list_documents": _list_documents,

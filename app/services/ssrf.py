@@ -1,5 +1,6 @@
 import ipaddress
 import socket
+from typing import cast
 from urllib.parse import urlparse
 
 _PRIVATE_NETWORKS = (
@@ -18,7 +19,7 @@ class InvalidFetchUrl(ValueError):
 
 
 def _resolve(host: str, port: int) -> list[str]:
-    return [info[4][0] for info in socket.getaddrinfo(host, port)]
+    return [cast(str, info[4][0]) for info in socket.getaddrinfo(host, port)]
 
 
 def _is_internal(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
