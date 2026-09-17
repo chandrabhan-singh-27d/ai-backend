@@ -159,27 +159,31 @@ router correctness, `3cd1d90` auth/reasoning/rename, `713d4df`+`eca8974` MCP env
   answers, `EmbedRequst` → `EmbedRequest`, `tools/stream_test.py` sends the API key,
   `tools/run_eval.py` loads `.env` before app imports.
 
-### ⬜ Phase 4 — Create GitHub Issues for backlog (then address one-by-one in separate commits)
-Backlog items (each becomes an issue, each fixed in its own commit):
+### ✅ Phase 4 — Create GitHub Issues for backlog — **DONE**
+Issues created on `chandrabhan-singh-27d/ai-backend`: #8, #9, #10, #11, #12, #13, #14, #15, #16
+(item #9 below — cold-start embed download — was resolved by the HF Inference Providers swap,
+so no issue was created for it). Each fixed in its own commit in Phase 5:
+
 1. **No automated tests** — only ruff + manual `tools/` scripts. Add pytest suite
-   (unit: stores/keys/jobs/rate-limiter; integration: routers vs live stack).
+   (unit: stores/keys/jobs/rate-limiter; integration: routers vs live stack). → **issue #8**,
+   **blocks production deployment (must be fixed before Phase 6).**
 2. **Model registry is a fake** — `models.py` uses hardcoded in-memory list unrelated to real
-   inference; `POST /models` is lost on restart. Persist or remove.
+   inference; `POST /models` is lost on restart. Persist or remove. → **issue #9**
 3. **Content-hash dedup claimed but not enforced** — `worker.py` computes `content_hash` but
-   `INSERT OR REPLACE` never checks it to skip duplicate content.
+   `INSERT OR REPLACE` never checks it to skip duplicate content. → **issue #10**
 4. **Worker blocks event loop** — blocking `embed()` in async loop stalls all requests ~30s;
-   use `asyncio.to_thread`. No job list/retry/heartbeat for stale `running` rows.
+   use `asyncio.to_thread`. No job list/retry/heartbeat for stale `running` rows. → **issue #11**
 5. **MCP writes bypass metadata store** — MCP `add_document`/`delete_document` touch Qdrant only;
-   they must sync SQLite metadata (visibility in `/documents/metadata`, purge via DELETE).
-6. **Public SSRF risk** — `GET /fetch` (demo.py) proxies arbitrary URLs unauthenticated.
+   they must sync SQLite metadata (visibility in `/documents/metadata`, purge via DELETE). → **issue #12**
+6. **Public SSRF risk** — `GET /fetch` (demo.py) proxies arbitrary URLs unauthenticated. → **issue #13**
 7. **Rate limiter is in-memory/per-process** — invalid with multiple uvicorn workers; needs
-   shared store (Redis) or documented single-worker constraint.
-8. **`calculate()` tool is `eval()`** — whitelist is small; assess/harden or remove.
+   shared store (Redis) or documented single-worker constraint. → **issue #14**
+8. **`calculate()` tool is `eval()`** — whitelist is small; assess/harden or remove. → **issue #15**
 9. **Cold-start embed model download** — sentence-transformer (~80MB) downloads on boot;
    pre-warm in image or fail fast with guidance. ✅ **Resolved by design:** embeddings moved
    to Hugging Face Inference Providers (commit `2737e9c`) — no local model/download at all.
 10. **`.env` import-order risk** — routers import before `load_dotenv()` runs; break via
-    `.env`-only key (see `main.py:11`).
+    `.env`-only key (see `main.py:11`). → **issue #16**
 
 ### ⬜ Phase 5 — FIX the Phase-4 backlog issues (one issue per commit)
 The issues created in Phase 4 ARE the work here. Before any production hardening, every
