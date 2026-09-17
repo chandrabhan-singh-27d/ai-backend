@@ -82,3 +82,17 @@ def test_unauthorized_request_is_rejected() -> None:
 def test_agent_graph_rejects_streaming() -> None:
     response = _post("/agent/graph", {"question": "hi", "stream": True})
     assert response.status_code == 400
+
+
+def test_models_lists_seeded_registry() -> None:
+    response = _get("/models")
+    assert response.status_code == 200
+    models = response.json()
+    assert isinstance(models, list)
+    assert len(models) >= 1
+    assert {"id", "provider", "name"} <= models[0].keys()
+
+
+def test_models_unknown_returns_404() -> None:
+    response = _get("/models/does-not-exist")
+    assert response.status_code == 404

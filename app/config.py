@@ -31,6 +31,7 @@ QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION", "documents")
 JOBS_DB_PATH = os.getenv("JOBS_DB_PATH", "data/jobs.db")
 KEYS_DB_PATH = os.getenv("KEYS_DB_PATH", "data/keys.db")
 METADATA_DB_PATH = os.getenv("METADATA_DB_PATH", "data/app.db")
+MODELS_DB_PATH = os.getenv("MODELS_DB_PATH", "data/models.db")
 
 # --- Auth / rate limiting ---
 RATE_LIMIT_MAX_REQUESTS = int(os.getenv("RATE_LIMIT_MAX_REQUESTS", "60"))
