@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import sys
 from typing import TypedDict
 
 from mcp import ClientSession, StdioServerParameters
@@ -22,9 +23,9 @@ client = AsyncOpenAI(
 )
 
 MCP_PARAMS = StdioServerParameters(
-    command="uv",
-    args=["run", "python", "servers/documents.py"],
-    env={"PYTHONPATH": ".", "PYTHONUNBUFFERED": "1"},
+    command=sys.executable,
+    args=["servers/documents.py"],
+    env={"PYTHONPATH": os.path.abspath("."), "PYTHONUNBUFFERED": "1"},
 )
 
 

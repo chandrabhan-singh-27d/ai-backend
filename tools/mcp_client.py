@@ -1,3 +1,4 @@
+import os
 import sys
 
 import anyio
@@ -77,9 +78,9 @@ if __name__ == "__main__":
 
     if server == "documents":
         client = DocumentsTest(
-            command="uv",
-            args=["run", "python", "servers/documents.py"],
-            env={"PYTHONPATH": ".", "PYTHONUNBUFFERED": "1"},
+            command=sys.executable,
+            args=["servers/documents.py"],
+            env={"PYTHONPATH": os.getcwd(), "PYTHONUNBUFFERED": "1"},
         )
         anyio.run(client.run)
     else:

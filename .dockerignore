@@ -9,7 +9,6 @@ logs
 qdrant_storage
 config
 tools
-servers
 README.md
 PROGRESS.md
 CONTINUATION.md

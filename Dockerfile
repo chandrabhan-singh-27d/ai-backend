@@ -17,6 +17,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     && rm -f /uv /uvx
 
 COPY app ./app
+COPY servers ./servers
 
 ENV PATH=/app/.venv/bin:$PATH
 ENV PYTHONPYCACHEPREFIX=/tmp/pycache
