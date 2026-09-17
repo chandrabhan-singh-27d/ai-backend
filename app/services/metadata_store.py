@@ -61,6 +61,15 @@ class MetadataStore:
             ).fetchall()
         return [cast("dict[str, object]", dict(row)) for row in rows]
 
+    def find_by_content_hash(self, content_hash: str) -> dict[str, object] | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT doc_id, title, source, content_hash, chunk_count, created_at "
+                "FROM documents WHERE content_hash = ? ORDER BY created_at LIMIT 1",
+                (content_hash,),
+            ).fetchone()
+        return cast("dict[str, object] | None", dict(row)) if row else None
+
     def delete_document(self, doc_id: str) -> None:
         with self._connect() as conn:
             conn.execute("DELETE FROM documents WHERE doc_id = ?", (doc_id,))

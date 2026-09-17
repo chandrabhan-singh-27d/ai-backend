@@ -18,9 +18,17 @@ async def _ingest_document(payload: dict[str, object]) -> dict[str, object]:
     text = str(payload["text"])
     title = str(payload.get("title", ""))
     source = str(payload.get("source", "unknown"))
+    content_hash = hashlib.sha256(text.encode()).hexdigest()
+
+    existing = get_metadata_store().find_by_content_hash(content_hash)
+    if existing is not None and str(existing["doc_id"]) != doc_id:
+        get_metadata_store().add_document(
+            doc_id=doc_id, title=title, content_hash=content_hash, source=source, chunk_count=1
+        )
+        return {"status": "duplicate", "id": doc_id, "deduped_against": existing["doc_id"]}
+
     embedding = await embed([text])
     get_store().add(doc_id=doc_id, text=text, embedding=embedding[0])
-    content_hash = hashlib.sha256(text.encode()).hexdigest()
     get_metadata_store().add_document(
         doc_id=doc_id, title=title, content_hash=content_hash, source=source, chunk_count=1
     )
