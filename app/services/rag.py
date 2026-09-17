@@ -47,4 +47,5 @@ async def answer_question(question: str, store: VectorStore | None = None) -> st
         with tracer.start_as_current_span("build_prompt"):
             prompt = build_prompt(question, documents=searched_documents)
 
-        return await chat(prompt)
+        answer, _ = await chat(prompt)
+        return answer

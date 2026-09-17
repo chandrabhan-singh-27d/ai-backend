@@ -22,6 +22,15 @@ async def _frame(events: AsyncIterator[dict[str, object]]) -> AsyncIterator[str]
         yield f"data: {json.dumps(event)}\n\n"
 
 
+async def _guarded(events: AsyncIterator[dict[str, object]]) -> AsyncIterator[dict[str, object]]:
+    try:
+        async for event in events:
+            yield event
+    except Exception:
+        logger.exception("stream_failed")
+        yield {"type": "error", "detail": "stream failed"}
+
+
 class ChatRequest(BaseModel):
     message: str
     stream: bool = False
@@ -56,6 +65,7 @@ class AgentResponse(BaseModel):
 
 class MCPAgentRequest(BaseModel):
     question: str
+    max_tokens: int = LLM_MAX_TOKENS
 
 
 class MCPAgentResponse(BaseModel):
@@ -66,12 +76,12 @@ class MCPAgentResponse(BaseModel):
 async def chat_endpoint(request: ChatRequest) -> ChatResponse | StreamingResponse:
     if request.stream:
         return StreamingResponse(
-            _frame(chat_stream(request.message, max_tokens=request.max_tokens)),
+            _frame(_guarded(chat_stream(request.message, max_tokens=request.max_tokens))),
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache"},
         )
     try:
-        content = await chat(request.message, max_tokens=request.max_tokens)
+        content, _ = await chat(request.message, max_tokens=request.max_tokens)
         return ChatResponse(response=content, model=LLM_MODEL)
     except Exception as e:
         logger.exception("chat_endpoint_failed")
@@ -82,13 +92,21 @@ async def chat_endpoint(request: ChatRequest) -> ChatResponse | StreamingRespons
 async def tool_chat_endpoint(request: ToolChatRequest) -> ToolChatResponse | StreamingResponse:
     if request.stream:
         return StreamingResponse(
-            _frame(chat_stream(request.message, tools_enabled=True, max_tokens=request.max_tokens)),
+            _frame(
+                _guarded(
+                    chat_stream(
+                        request.message, tools_enabled=True, max_tokens=request.max_tokens
+                    )
+                )
+            ),
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache"},
         )
     try:
-        content = await chat(request.message, tools_enabled=True, max_tokens=request.max_tokens)
-        return ToolChatResponse(response=content, tool_used=True)
+        content, tool_used = await chat(
+            request.message, tools_enabled=True, max_tokens=request.max_tokens
+        )
+        return ToolChatResponse(response=content, tool_used=tool_used)
     except Exception as e:
         logger.exception("tool_chat_endpoint_failed")
         raise HTTPException(status_code=502, detail=str(e)) from e
@@ -98,21 +116,28 @@ async def tool_chat_endpoint(request: ToolChatRequest) -> ToolChatResponse | Str
 async def agent_endpoint(request: AgentRequest) -> AgentResponse | StreamingResponse:
     if request.stream:
         return StreamingResponse(
-            _frame(run_agent_stream(request.question, max_tokens=request.max_tokens)),
+            _frame(
+                _guarded(run_agent_stream(request.question, max_tokens=request.max_tokens))
+            ),
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache"},
         )
-    answer = await run_agent(request.question)
+    answer = await run_agent(request.question, max_tokens=request.max_tokens)
     return AgentResponse(answer=answer)
 
 
 @router.post("/agent/mcp", response_model=MCPAgentResponse)
 async def mcp_agent_endpoint(request: MCPAgentRequest) -> MCPAgentResponse:
-    answer = await run_mcp_agent(request.question)
+    answer = await run_mcp_agent(request.question, max_tokens=request.max_tokens)
     return MCPAgentResponse(answer=answer)
 
 
 @router.post("/agent/graph", response_model=AgentResponse)
 async def graph_agent_endpoint(request: AgentRequest) -> AgentResponse:
-    answer = await run_agent_graph(request.question)
+    if request.stream:
+        raise HTTPException(
+            status_code=400,
+            detail="streaming is not supported for /agent/graph; set stream=false",
+        )
+    answer = await run_agent_graph(request.question, max_tokens=request.max_tokens)
     return AgentResponse(answer=answer)

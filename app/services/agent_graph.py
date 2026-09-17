@@ -4,12 +4,13 @@ import logging
 import operator
 from typing import Annotated, TypedDict, cast
 
+from langgraph.errors import GraphRecursionError
 from langgraph.graph import END, START, StateGraph
 from openai.types.chat.chat_completion_message_function_tool_call import (
     ChatCompletionMessageFunctionToolCall,
 )
 
-from app.config import AGENT_GRAPH_RECURSION_LIMIT, LLM_MODEL
+from app.config import AGENT_GRAPH_RECURSION_LIMIT, LLM_MAX_TOKENS, LLM_MODEL
 from app.services.llm import TOOLS, call_tool, client
 from app.services.metrics import LLM_TOKENS, measure_llm_call
 
@@ -20,41 +21,53 @@ class AgentState(TypedDict):
     messages: Annotated[list[dict[str, object]], operator.add]
 
 
-async def call_llm(state: AgentState) -> dict[str, list[dict[str, object]]]:
-    with measure_llm_call(model=LLM_MODEL, tools_enabled=True, segment="agent_graph"):
-        response = await client.chat.completions.create(
-            model=LLM_MODEL,
-            messages=state["messages"],  # type: ignore[arg-type]
-            tools=TOOLS,
-        )
-    if response.usage is not None:
-        LLM_TOKENS.labels(model=LLM_MODEL, tools_enabled="true").inc(
-            response.usage.total_tokens
-        )
+def _build_graph(max_tokens: int = LLM_MAX_TOKENS):
+    async def call_llm(state: AgentState) -> dict[str, list[dict[str, object]]]:
+        with measure_llm_call(model=LLM_MODEL, tools_enabled=True, segment="agent_graph"):
+            response = await client.chat.completions.create(
+                model=LLM_MODEL,
+                messages=state["messages"],  # type: ignore[arg-type]
+                tools=TOOLS,
+                max_tokens=max_tokens,
+            )
+        if response.usage is not None:
+            LLM_TOKENS.labels(model=LLM_MODEL, tools_enabled="true").inc(
+                response.usage.total_tokens
+            )
 
-    choice = response.choices[0]
-    message = choice.message
+        choice = response.choices[0]
+        message = choice.message
 
-    if message.tool_calls:
-        tool_call = message.tool_calls[0]
-        assert isinstance(tool_call, ChatCompletionMessageFunctionToolCall)
-        assistant_msg: dict[str, object] = {
-            "role": "assistant",
-            "tool_calls": [
-                {
-                    "id": tool_call.id,
-                    "type": "function",
-                    "function": {
-                        "name": tool_call.function.name,
-                        "arguments": tool_call.function.arguments,
-                    },
-                }
-            ],
-        }
-    else:
-        assistant_msg = {"role": "assistant", "content": message.content or ""}
+        if message.tool_calls:
+            tool_call = message.tool_calls[0]
+            assert isinstance(tool_call, ChatCompletionMessageFunctionToolCall)
+            assistant_msg: dict[str, object] = {
+                "role": "assistant",
+                "tool_calls": [
+                    {
+                        "id": tool_call.id,
+                        "type": "function",
+                        "function": {
+                            "name": tool_call.function.name,
+                            "arguments": tool_call.function.arguments,
+                        },
+                    }
+                ],
+            }
+        else:
+            assistant_msg = {"role": "assistant", "content": message.content or ""}
 
-    return {"messages": [assistant_msg]}
+        return {"messages": [assistant_msg]}
+
+    builder = StateGraph(AgentState)
+    builder.add_node("call_llm", call_llm)
+    builder.add_node("run_tools", run_tools)
+
+    builder.add_edge(START, "call_llm")
+    builder.add_conditional_edges("call_llm", route_after_llm)
+    builder.add_edge("run_tools", "call_llm")
+
+    return builder.compile()
 
 
 async def run_tools(state: AgentState) -> dict[str, list[dict[str, object]]]:
@@ -86,22 +99,15 @@ def route_after_llm(state: AgentState) -> str:
     return END
 
 
-builder = StateGraph(AgentState)
-builder.add_node("call_llm", call_llm)
-builder.add_node("run_tools", run_tools)
-
-builder.add_edge(START, "call_llm")
-builder.add_conditional_edges("call_llm", route_after_llm)
-builder.add_edge("run_tools", "call_llm")
-
-graph = builder.compile()
-
-
-async def run_agent_graph(question: str) -> str:
-    result = await graph.ainvoke(
-        {"messages": [{"role": "user", "content": question}]},
-        config={"recursion_limit": AGENT_GRAPH_RECURSION_LIMIT},
-    )
+async def run_agent_graph(question: str, max_tokens: int = LLM_MAX_TOKENS) -> str:
+    graph = _build_graph(max_tokens)
+    try:
+        result = await graph.ainvoke(
+            {"messages": [{"role": "user", "content": question}]},
+            config={"recursion_limit": AGENT_GRAPH_RECURSION_LIMIT},
+        )
+    except GraphRecursionError:
+        return "Agent reached the graph recursion limit without a final answer."
     messages = cast("list[dict[str, object]]", result["messages"])
     content = messages[-1].get("content")
     assert isinstance(content, str)

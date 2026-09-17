@@ -66,7 +66,9 @@ def _strip_reasoning(content: str) -> str:
     return content
 
 
-async def chat(message: str, tools_enabled: bool = False, max_tokens: int = LLM_MAX_TOKENS) -> str:
+async def chat(
+    message: str, tools_enabled: bool = False, max_tokens: int = LLM_MAX_TOKENS
+) -> tuple[str, bool]:
     if tools_enabled:
         with measure_llm_call(model=LLM_MODEL, tools_enabled=True, segment="tool_round"):
             response = await client.chat.completions.create(
@@ -129,7 +131,7 @@ async def chat(message: str, tools_enabled: bool = False, max_tokens: int = LLM_
             final = await client.chat.completions.create(
                 model=LLM_MODEL,
                 messages=messages,  # type: ignore[arg-type]
-                max_tokens=LLM_MAX_TOKENS,
+                max_tokens=max_tokens,
                 extra_body={
                     "reasoning_format": LLM_REASONING_FORMAT,
                     "reasoning_effort": LLM_REASONING_EFFORT,
@@ -140,12 +142,12 @@ async def chat(message: str, tools_enabled: bool = False, max_tokens: int = LLM_
                 final.usage.total_tokens
             )
         _log_llm_call("final", True, final)
-        return _strip_reasoning(final.choices[0].message.content or "")
-    return _strip_reasoning(choice.message.content or "")
+        return _strip_reasoning(final.choices[0].message.content or ""), True
+    return _strip_reasoning(choice.message.content or ""), False
 
 
 async def chat_stream(
-    message: str, tools_enabled: bool = False, max_tokens: int = 400
+    message: str, tools_enabled: bool = False, max_tokens: int = LLM_MAX_TOKENS
 ) -> AsyncIterator[dict[str, object]]:
     if tools_enabled:
         tool_calls: dict[int, dict[str, str]] = {}
@@ -165,7 +167,10 @@ async def chat_stream(
                 },
             )
             async for chunk in iter_chunks(stream):
-                for tc in (chunk.choices[0].delta.tool_calls if chunk.choices else None) or []:
+                delta = chunk.choices[0].delta if chunk.choices else None
+                if delta and delta.content:
+                    yield {"type": "token", "content": delta.content}
+                for tc in (delta.tool_calls if delta else None) or []:
                     entry = tool_calls.setdefault(tc.index, {"id": "", "name": "", "arguments": ""})
                     if tc.function:
                         if tc.function.name:

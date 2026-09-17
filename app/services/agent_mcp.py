@@ -12,7 +12,7 @@ from openai.types.chat.chat_completion_message_function_tool_call import (
     ChatCompletionMessageFunctionToolCall,
 )
 
-from app.config import AGENT_MAX_STEPS, GROQ_BASE_URL, LLM_MODEL
+from app.config import AGENT_MAX_STEPS, GROQ_BASE_URL, LLM_MAX_TOKENS, LLM_MODEL
 from app.services.metrics import LLM_TOKENS, measure_llm_call
 
 logger = logging.getLogger("app.services.agent_mcp")
@@ -48,7 +48,9 @@ def mcp_tools_to_openai(mcp_tools: list[Tool]) -> list[MCPTools]:
     ]
 
 
-async def run_mcp_agent(question: str, max_steps: int = AGENT_MAX_STEPS) -> str:
+async def run_mcp_agent(
+    question: str, max_steps: int = AGENT_MAX_STEPS, max_tokens: int = LLM_MAX_TOKENS
+) -> str:
     async with (
         stdio_client(MCP_PARAMS) as (read, write),
         ClientSession(read, write) as session,
@@ -68,6 +70,7 @@ async def run_mcp_agent(question: str, max_steps: int = AGENT_MAX_STEPS) -> str:
                     model=LLM_MODEL,
                     messages=messages,  # type: ignore[arg-type]
                     tools=openai_tools,  # type: ignore[arg-type]
+                    max_tokens=max_tokens,
                 )
             if response.usage is not None:
                 LLM_TOKENS.labels(model=LLM_MODEL, tools_enabled="true").inc(
