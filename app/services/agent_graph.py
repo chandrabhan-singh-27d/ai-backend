@@ -10,7 +10,7 @@ from openai.types.chat.chat_completion_message_function_tool_call import (
 )
 
 from app.config import AGENT_GRAPH_RECURSION_LIMIT, LLM_MODEL
-from app.services.llm import TOOL_MAP, TOOLS, client
+from app.services.llm import TOOLS, call_tool, client
 from app.services.metrics import LLM_TOKENS, measure_llm_call
 
 logger = logging.getLogger("app.services.agent_graph")
@@ -68,7 +68,7 @@ async def run_tools(state: AgentState) -> dict[str, list[dict[str, object]]]:
     tool_call_id = cast("str", tool_call["id"])
 
     tool_args = json.loads(arguments)
-    result = TOOL_MAP[tool_name](**tool_args)
+    result = await call_tool(tool_name, **tool_args)
 
     tool_msg: dict[str, object] = {
         "role": "tool",

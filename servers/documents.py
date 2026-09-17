@@ -85,9 +85,9 @@ async def handle_call_tool(
     name = params.name
 
     if name == "search_documents":
-        from app.services.embeddings import embed_sync
+        from app.services.embeddings import embed
 
-        query_embedding = embed_sync([args["query"]])[0]
+        query_embedding = (await embed([args["query"]]))[0]
         top_k = args.get("top_k", 3)
         results = get_store().search(query_embedding, top_k=top_k)
         if not results:
@@ -115,9 +115,9 @@ async def handle_call_tool(
         return _text("\n".join(lines))
 
     if name == "add_document":
-        from app.services.embeddings import embed_sync
+        from app.services.embeddings import embed
 
-        embedding = embed_sync([args["text"]])[0]
+        embedding = (await embed([args["text"]]))[0]
         get_store().add(doc_id=args["doc_id"], text=args["text"], embedding=embedding)
         return _text(f"Document '{args['doc_id']}' added.")
 

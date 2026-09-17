@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import os
@@ -23,7 +24,7 @@ from app.config import (
     LLM_REASONING_EFFORT,
     LLM_REASONING_FORMAT,
 )
-from app.services.embeddings import embed_sync
+from app.services.embeddings import embed
 from app.services.metrics import LLM_TOKENS, LLM_TTFT, measure_llm_call
 from app.services.tools import calculate
 from app.services.vector_store import get_store
@@ -107,7 +108,7 @@ async def chat(message: str, tools_enabled: bool = False, max_tokens: int = LLM_
         assert isinstance(tool_call, ChatCompletionMessageFunctionToolCall)
         tool_name = tool_call.function.name
         tool_args = json.loads(tool_call.function.arguments)
-        result = TOOL_MAP[tool_name](**tool_args)
+        result = await call_tool(tool_name, **tool_args)
 
         messages = [
             {"role": "user", "content": message},
@@ -187,7 +188,7 @@ async def chat_stream(
         first = tool_calls[0]
         tool_name = first["name"]
         tool_args = json.loads(first["arguments"] or "{}")
-        result = str(TOOL_MAP[tool_name](**tool_args))
+        result = await call_tool(tool_name, **tool_args)
         yield {"type": "tool_call", "name": tool_name}
 
         messages: list[ChatCompletionMessageParam] = [
@@ -274,8 +275,8 @@ async def chat_stream(
     yield {"type": "done"}
 
 
-def _search_documents(query: str, top_k: int = 3) -> str:
-    query_embedding = embed_sync([query])[0]
+async def _search_documents(query: str, top_k: int = 3) -> str:
+    query_embedding = (await embed([query]))[0]
     results = get_store().search(query_embedding, top_k=top_k)
     if not results:
         return "No results."
@@ -287,6 +288,12 @@ def _list_documents() -> str:
     if not docs:
         return "No documents stored."
     return "\n".join(f"- [{doc['id']}] {doc['text'][:80]}" for doc in docs)
+
+
+async def call_tool(name: str, **kwargs) -> str:
+    fn = TOOL_MAP[name]
+    result = await fn(**kwargs) if asyncio.iscoroutinefunction(fn) else fn(**kwargs)
+    return str(result)
 
 
 TOOLS: list[ChatCompletionToolParam] = [

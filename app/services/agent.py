@@ -11,7 +11,7 @@ from openai.types.chat.chat_completion_message_function_tool_call import (
 from openai.types.completion_usage import CompletionUsage
 
 from app.config import AGENT_MAX_STEPS, LLM_MAX_TOKENS, LLM_MODEL
-from app.services.llm import TOOL_MAP, TOOLS, client, iter_chunks, log_llm_usage
+from app.services.llm import TOOLS, call_tool, client, iter_chunks, log_llm_usage
 from app.services.metrics import LLM_TOKENS, LLM_TTFT, measure_llm_call
 
 logger = logging.getLogger("app.services.agent")
@@ -44,7 +44,7 @@ async def run_agent(
         assert isinstance(tool_call, ChatCompletionMessageFunctionToolCall)
         tool_name = tool_call.function.name
         tool_args = json.loads(tool_call.function.arguments)
-        result = TOOL_MAP[tool_name](**tool_args)
+        result = await call_tool(tool_name, **tool_args)
 
         messages.append(
             {
@@ -121,7 +121,7 @@ async def run_agent_stream(
         first = tool_calls[0]
         tool_name = first["name"]
         tool_args = json.loads(first["arguments"] or "{}")
-        result = TOOL_MAP[tool_name](**tool_args)
+        result = await call_tool(tool_name, **tool_args)
         yield {"type": "tool_call", "name": tool_name}
 
         messages.append(
