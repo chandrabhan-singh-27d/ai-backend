@@ -11,6 +11,10 @@ GROQ_BASE_URL = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
 AGENT_MAX_STEPS = int(os.getenv("AGENT_MAX_STEPS", "5"))
 AGENT_GRAPH_RECURSION_LIMIT = int(os.getenv("AGENT_GRAPH_RECURSION_LIMIT", "10"))
 
+# --- Jobs / worker ---
+JOB_MAX_ATTEMPTS = int(os.getenv("JOB_MAX_ATTEMPTS", "3"))
+JOB_HEARTBEAT_TIMEOUT_SECONDS = int(os.getenv("JOB_HEARTBEAT_TIMEOUT_SECONDS", "300"))
+
 # --- RAG ---
 RAG_TOP_K = int(os.getenv("RAG_TOP_K", "3"))
 

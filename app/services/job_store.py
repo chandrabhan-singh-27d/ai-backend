@@ -2,7 +2,7 @@ import json
 import os
 import sqlite3
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import TypedDict, cast
 
 _SCHEMA = """
@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS jobs(
     payload         TEXT NOT NULL,
     result          TEXT,
     error           TEXT,
+    attempts        INTEGER NOT NULL DEFAULT 0,
     created_at      TEXT NOT NULL,
     started_at      TEXT,
     finished_at     TEXT
@@ -24,6 +25,7 @@ class Job(TypedDict):
     id: str
     kind: str
     payload: dict[str, object]
+    attempts: int
 
 
 class JobStore:
@@ -32,6 +34,12 @@ class JobStore:
         os.makedirs(os.path.dirname(db_path), exist_ok=True)
         with self._connect() as conn:
             conn.execute(_SCHEMA)
+            self._migrate(conn)
+
+    def _migrate(self, conn: sqlite3.Connection) -> None:
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(jobs)").fetchall()}
+        if "attempts" not in columns:
+            conn.execute("ALTER TABLE jobs ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0")
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path)
@@ -48,10 +56,23 @@ class JobStore:
             )
         return job_id
 
-    def claim(self) -> Job | None:
+    def _reclaim_stale(self, conn: sqlite3.Connection, heartbeat_timeout_seconds: int) -> None:
+        threshold = (datetime.now(UTC) - timedelta(seconds=heartbeat_timeout_seconds)).isoformat()
+        conn.execute(
+            "UPDATE jobs SET status = 'pending', started_at = NULL "
+            "WHERE status = 'running' AND started_at < ?",
+            (threshold,),
+        )
+
+    def claim(self, heartbeat_timeout_seconds: int | None = None) -> Job | None:
+        if heartbeat_timeout_seconds is None:
+            from app.config import JOB_HEARTBEAT_TIMEOUT_SECONDS
+
+            heartbeat_timeout_seconds = JOB_HEARTBEAT_TIMEOUT_SECONDS
         with self._connect() as conn:
+            self._reclaim_stale(conn, heartbeat_timeout_seconds)
             row = conn.execute(
-                "SELECT id, kind, payload FROM jobs "
+                "SELECT id, kind, payload, attempts FROM jobs "
                 "WHERE status = 'pending' ORDER BY created_at LIMIT 1"
             ).fetchone()
             if row is None:
@@ -71,7 +92,7 @@ class JobStore:
     def get(self, job_id: str) -> dict[str, object] | None:
         with self._connect() as conn:
             row = conn.execute(
-                "SELECT id, kind, status, payload, result, error, "
+                "SELECT id, kind, status, payload, result, error, attempts, "
                 "created_at, started_at, finished_at FROM jobs WHERE id = ?",
                 (job_id,),
             ).fetchone()
@@ -83,11 +104,36 @@ class JobStore:
             job["result"] = json.loads(job["result"])
         return job
 
+    def list(self, limit: int = 20) -> list[dict[str, object]]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT id, kind, status, payload, result, error, attempts, "
+                "created_at, started_at, finished_at FROM jobs "
+                "ORDER BY created_at DESC LIMIT ?",
+                (max(1, min(limit, 100)),),
+            ).fetchall()
+        jobs: list[dict[str, object]] = []
+        for row in rows:
+            job = dict(row)
+            job["payload"] = json.loads(job["payload"])
+            if job["result"] is not None:
+                job["result"] = json.loads(job["result"])
+            jobs.append(job)
+        return jobs
+
     def complete(self, job_id: str, result: dict[str, object]) -> None:
         with self._connect() as conn:
             conn.execute(
                 "UPDATE jobs SET status = 'succeeded', result = ?, finished_at = ? WHERE id = ?",
                 (json.dumps(result), datetime.now(UTC).isoformat(), job_id),
+            )
+
+    def requeue(self, job_id: str, error: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE jobs SET status = 'pending', error = ?, started_at = NULL, "
+                "attempts = attempts + 1 WHERE id = ?",
+                (error, job_id),
             )
 
     def fail(self, job_id: str, error: str) -> None:

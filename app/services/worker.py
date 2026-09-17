@@ -28,7 +28,7 @@ async def _ingest_document(payload: dict[str, object]) -> dict[str, object]:
         return {"status": "duplicate", "id": doc_id, "deduped_against": existing["doc_id"]}
 
     embedding = await embed([text])
-    get_store().add(doc_id=doc_id, text=text, embedding=embedding[0])
+    await asyncio.to_thread(get_store().add, doc_id=doc_id, text=text, embedding=embedding[0])
     get_metadata_store().add_document(
         doc_id=doc_id, title=title, content_hash=content_hash, source=source, chunk_count=1
     )
@@ -40,6 +40,8 @@ JOB_HANDLERS: dict[str, JobHandler] = {"ingest_document": _ingest_document}
 
 
 async def run_worker_loop(poll_interval: float = 0.5) -> None:
+    from app.config import JOB_MAX_ATTEMPTS
+
     store = get_job_store()
 
     while True:
@@ -53,5 +55,8 @@ async def run_worker_loop(poll_interval: float = 0.5) -> None:
             result = await handler(job["payload"])
             store.complete(job["id"], result=result)
         except Exception as e:
-            logger.exception("job %s failed", job["id"])
-            store.fail(job["id"], str(e))
+            logger.exception("job %s failed (attempt %d)", job["id"], job["attempts"] + 1)
+            if job["attempts"] + 1 >= JOB_MAX_ATTEMPTS:
+                store.fail(job["id"], str(e))
+            else:
+                store.requeue(job["id"], str(e))
