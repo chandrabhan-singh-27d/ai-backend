@@ -194,6 +194,12 @@ open issue from Phase 4 must be resolved:
 - Each commit runs `uv run ruff check app/` + the matching smoke test before done.
 - Update this roadmap (checked boxes + issue links) as each issue lands.
 
+Progress:
+- ✅ **#8 automated tests** — done in `acb22e8` (26 tests: 21 unit + 5 live integration).
+- ⬜ #9 model registry · #10 content-hash dedup · #11 worker async/retry/heartbeat ·
+  #12 MCP metadata sync · #13 SSRF /fetch · #14 distributed rate limiting ·
+  #15 eval-based calculate() · #16 .env import order.
+
 ### ⬜ Phase 6 — Production-ready hardening (after ALL Phase-4/5 backlog issues are fixed)
 - CI/CD: extend `.github/workflows/lint.yml` → add build (docker build), tests, maybe deploy.
 - Env hygiene: `.env.example` for everything; config docs; health/readiness split.
