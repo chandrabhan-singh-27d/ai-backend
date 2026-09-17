@@ -22,7 +22,15 @@ dependencies = [
 [dependency-groups]
 dev = [
     "pyright>=1.1.414",
+    "pytest>=8.3.0",
     "ruff>=0.16.3",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = [
+    "integration: requires the live Docker stack (set AI_BACKEND_KEY)",
 ]
 
 [tool.ruff]

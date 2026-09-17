@@ -84,10 +84,12 @@ PYTHONPATH=. uv run python tools/test_agent_graph.py  # agent behavior
 PYTHONPATH=. uv run python tools/mcp_client.py documents   # MCP server smoke
 ```
 
-### Lint / typecheck
+### Lint / typecheck / tests
 ```bash
-uv run ruff check app/                       # must be clean
+uv run ruff check app/ tools/ servers/ tests/   # must be clean
 uv run pyright app/services/job_store.py app/services/worker.py   # per-file only (whole repo is slow)
+uv run pytest                                   # unit tests (hermetic); with the stack up:
+#   AI_BACKEND_KEY=<KEY> uv run pytest          # includes live-stack integration tests
 ```
 
 ### Observability quick checks
