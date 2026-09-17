@@ -5,6 +5,9 @@ from typing import TypedDict
 import httpx
 from fastapi import APIRouter, HTTPException
 
+from app.dependencies import PROTECTED
+from app.services.ssrf import InvalidFetchUrl, validate_fetch_url
+
 router = APIRouter()
 
 
@@ -37,10 +40,14 @@ async def blocked_demo() -> Response:
         "elapsed": 3
     }
 
-@router.get("/fetch")
+@router.get("/fetch", dependencies=PROTECTED)
 async def fetch_url(url: str) -> FetchResponse:
     try:
-        async with httpx.AsyncClient() as client:
+        validate_fetch_url(url)
+    except InvalidFetchUrl as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    try:
+        async with httpx.AsyncClient(follow_redirects=False) as client:
             response = await client.get(url)
         return {
             "url": url,
