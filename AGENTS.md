@@ -187,18 +187,28 @@ so no issue was created for it). Each fixed in its own commit in Phase 5:
 10. **`.env` import-order risk** — routers import before `load_dotenv()` runs; break via
     `.env`-only key (see `main.py:11`). → **issue #16**
 
-### ⬜ Phase 5 — FIX the Phase-4 backlog issues (one issue per commit)
-The issues created in Phase 4 ARE the work here. Before any production hardening, every
-open issue from Phase 4 must be resolved:
-- One focused commit per issue (they map 1:1 to GitHub issues; reference `closes #N`).
-- Each commit runs `uv run ruff check app/` + the matching smoke test before done.
-- Update this roadmap (checked boxes + issue links) as each issue lands.
+### ✅ Phase 5 — FIX the Phase-4 backlog issues (one issue per commit) — **DONE**
+All 9 backlog issues closed, each in its own focused commit (ruff + smoke per commit):
+- ✅ **#8 automated tests** — `acb22e8` (pytest suite: unit stores/keys/jobs/rate-limiter/
+  vector/metadata/worker/ssrf/tools/mcp-server + live integration; 51 hermetic unit tests).
+- ✅ **#9 model registry persisted** — `5e5bb88` (SQLite ModelStore seeded from
+  `LLM_MODEL`/`EVAL_JUDGE_MODEL`; survives restart).
+- ✅ **#10 content-hash dedup enforced** — `1ed04c6` (`find_by_content_hash` → skip
+  embed/vector; job result `duplicate` + `deduped_against`).
+- ✅ **#11 worker async + retry + heartbeat + job list** — `69ec133`
+  (`asyncio.to_thread` for qdrant writes, attempts w/ `JOB_MAX_ATTEMPTS` requeue,
+  stale-row reclaim w/ `JOB_HEARTBEAT_TIMEOUT_SECONDS`, `GET /jobs`).
+- ✅ **#12 MCP writes sync metadata** — `631cdba` (add/delete → SQLite rows).
+- ✅ **#13 SSRF /fetch** — `72c4d88` (authenticated + `validate_fetch_url` private-range
+  guard; `/slow-*` stay public).
+- ✅ **#14 rate limiter strategy** — `3983558` (`RateLimiter` ABC: `MemoryRateLimiter`
+  default/single-worker, `RedisRateLimiter` fixed-window for multi-worker via
+  `RATE_LIMIT_STRATEGY`/`REDIS_URL`; compose pins memory + documents the constraint).
+- ✅ **#15 calculate() hardened** — `de2e208` (eval → whitelist AST evaluator).
+- ✅ **#16 .env import order** — `528189d` (`load_dotenv()` before app imports).
 
-Progress:
-- ✅ **#8 automated tests** — done in `acb22e8` (26 tests: 21 unit + 5 live integration).
-- ⬜ #9 model registry · #10 content-hash dedup · #11 worker async/retry/heartbeat ·
-  #12 MCP metadata sync · #13 SSRF /fetch · #14 distributed rate limiting ·
-  #15 eval-based calculate() · #16 .env import order.
+Remaining gate before Phase 6: rebuild the Docker image (`docker compose up -d --build`)
+so the live stack runs these fixes, then re-run the full verify + live integration suite.
 
 ### ⬜ Phase 6 — Production-ready hardening (after ALL Phase-4/5 backlog issues are fixed)
 - CI/CD: extend `.github/workflows/lint.yml` → add build (docker build), tests, maybe deploy.
