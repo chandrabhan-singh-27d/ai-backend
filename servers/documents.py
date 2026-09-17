@@ -1,9 +1,12 @@
 import anyio
+from dotenv import load_dotenv
 from mcp import types
 from mcp.server import Server, ServerRequestContext
 from mcp.server.stdio import stdio_server
 
-from app.services.vector_store import get_store
+load_dotenv()
+
+from app.services.vector_store import get_store  # noqa: E402
 
 TOOLS = [
     types.Tool(

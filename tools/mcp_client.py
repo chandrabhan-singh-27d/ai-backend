@@ -80,7 +80,11 @@ if __name__ == "__main__":
         client = DocumentsTest(
             command=sys.executable,
             args=["servers/documents.py"],
-            env={"PYTHONPATH": os.getcwd(), "PYTHONUNBUFFERED": "1"},
+            env={
+                **os.environ,
+                "PYTHONPATH": os.getcwd(),
+                "PYTHONUNBUFFERED": "1",
+            },
         )
         anyio.run(client.run)
     else:

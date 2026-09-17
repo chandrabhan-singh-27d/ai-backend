@@ -32,7 +32,7 @@ client = AsyncOpenAI(
 MCP_PARAMS = StdioServerParameters(
     command=sys.executable,
     args=["servers/documents.py"],
-    env={"PYTHONPATH": os.path.abspath("."), "PYTHONUNBUFFERED": "1"},
+    env={**os.environ, "PYTHONPATH": os.path.abspath("."), "PYTHONUNBUFFERED": "1"},
 )
 
 
