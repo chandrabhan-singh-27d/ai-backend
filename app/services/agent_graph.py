@@ -50,7 +50,8 @@ def _build_graph(max_tokens: int = LLM_MAX_TOKENS):
 
         if message.tool_calls:
             tool_call = message.tool_calls[0]
-            assert isinstance(tool_call, ChatCompletionMessageFunctionToolCall)
+            if not isinstance(tool_call, ChatCompletionMessageFunctionToolCall):
+                raise ValueError(f"unsupported tool call type: {type(tool_call).__name__}")
             assistant_msg: dict[str, object] = {
                 "role": "assistant",
                 "tool_calls": [
@@ -120,5 +121,6 @@ async def run_agent_graph(question: str, max_tokens: int = LLM_MAX_TOKENS) -> st
         return "Agent reached the graph recursion limit without a final answer."
     messages = cast("list[dict[str, object]]", result["messages"])
     content = messages[-1].get("content")
-    assert isinstance(content, str)
+    if not isinstance(content, str):
+        raise ValueError("agent graph finished without a text answer")
     return content

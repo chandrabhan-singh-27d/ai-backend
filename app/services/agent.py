@@ -51,7 +51,8 @@ async def run_agent(
             return choice.message.content or ""
 
         tool_call = choice.message.tool_calls[0]
-        assert isinstance(tool_call, ChatCompletionMessageFunctionToolCall)
+        if not isinstance(tool_call, ChatCompletionMessageFunctionToolCall):
+            raise ValueError(f"unsupported tool call type: {type(tool_call).__name__}")
         tool_name = tool_call.function.name
         tool_args = json.loads(tool_call.function.arguments)
         result = await call_tool(tool_name, **tool_args)

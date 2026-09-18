@@ -104,14 +104,16 @@ async def run_mcp_agent(
                 return choice.message.content or ""
 
             tool_call = choice.message.tool_calls[0]
-            assert isinstance(tool_call, ChatCompletionMessageFunctionToolCall)
+            if not isinstance(tool_call, ChatCompletionMessageFunctionToolCall):
+                raise ValueError(f"unsupported tool call type: {type(tool_call).__name__}")
             tool_name = tool_call.function.name
             tool_args = json.loads(tool_call.function.arguments)
 
             result = await session.call_tool(tool_name, tool_args)
 
             content = result.content[0]
-            assert isinstance(content, TextContent)
+            if not isinstance(content, TextContent):
+                raise ValueError(f"unsupported MCP tool result type: {type(content).__name__}")
             tool_result = content.text
 
             messages.append(

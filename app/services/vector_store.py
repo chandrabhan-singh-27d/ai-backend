@@ -53,8 +53,8 @@ class VectorStore:
             payload = point.payload or {}
             doc_id = payload.get("doc_id", "")
             text = payload.get("text", "")
-            assert isinstance(doc_id, str)
-            assert isinstance(text, str)
+            if not isinstance(doc_id, str) or not isinstance(text, str):
+                continue
             results.append({"id": doc_id, "text": text, "score": point.score})
         return results
 
@@ -70,7 +70,8 @@ class VectorStore:
             return None
         payload = records[0].payload or {}
         text = payload.get("text")
-        assert isinstance(text, str)
+        if not isinstance(text, str):
+            return None
         return text
 
     def exists(self, doc_id: str) -> bool:
@@ -96,8 +97,8 @@ class VectorStore:
             payload = record.payload or {}
             doc_id = payload.get("doc_id", "")
             text = payload.get("text", "")
-            assert isinstance(doc_id, str)
-            assert isinstance(text, str)
+            if not isinstance(doc_id, str) or not isinstance(text, str):
+                continue
             docs.append({"id": doc_id, "text": text})
         return docs
 
