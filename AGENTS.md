@@ -116,6 +116,9 @@ curl -s http://localhost:3000/api/search?type=dash-db   # "RAG Overview" provisi
   `EVAL_JUDGE_REASONING_EFFORT`). Do NOT hardcode model strings elsewhere.
 - **Rules for agents:** when a task spans multiple files, make one focused commit per concern,
   run lint + the matching smoke test, and update this file's roadmap (checked boxes) when done.
+- **Audits create issues:** every code/production audit must file one GitHub issue per remaining
+  finding (label `tech-debt`); findings that were fixed are recorded in the roadmap instead. Never
+  finish an audit with unfiled findings.
 
 ---
 
