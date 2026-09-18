@@ -23,6 +23,8 @@ def _resolve(host: str, port: int) -> list[str]:
 
 
 def _is_internal(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
+        ip = ip.ipv4_mapped
     return any(ip in network for network in _PRIVATE_NETWORKS)
 
 

@@ -35,6 +35,14 @@ def test_rejects_ipv4_mapped_private(monkeypatch) -> None:
         validate_fetch_url("http://anything.example")
 
 
+def test_rejects_ipv4_mapped_ipv6_bypass(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "app.services.ssrf._resolve", lambda host, port: ["::ffff:127.0.0.1"]
+    )
+    with pytest.raises(InvalidFetchUrl):
+        validate_fetch_url("http://[::ffff:127.0.0.1]/x")
+
+
 def test_allows_public_https(monkeypatch) -> None:
     monkeypatch.setattr("app.services.ssrf._resolve", lambda host, port: ["93.184.216.34"])
     validate_fetch_url("https://example.com/x")
