@@ -252,6 +252,42 @@ suite re-ran green on the new image (60/60; store restored to pristine state aft
     notes. Cross-checked: no stale PROGRESS/CONTINUATION references remain (only
     historical mentions in this roadmap).
 
+### ✅ Phase 8 — Fix the Phase-6 production audit backlog (#17–#27, one issue per commit) — **DONE**
+11 issues filed by the production audit (label `tech-debt`), each closed in its own
+focused commit (ruff + pyright strict + hermetic pytest per commit):
+- ✅ **#17 blocking Qdrant reads in async handlers** — `422a5bb` (`store.search` /
+  `list_all` now via `asyncio.to_thread` in `/rag`, `POST /documents/search`, and the
+  agent `search_documents`/`list_documents` tools).
+- ✅ **#18 worker sync SQLite I/O** — `7220635` (claim/complete/fail/requeue and
+  metadata lookups/inserts off the event loop via `asyncio.to_thread`).
+- ✅ **#19 assert-based validation** — `ecbdae1` (Qdrant payload reads skip malformed
+  points / return None; unsupported tool-call & MCP result types raise descriptive
+  `ValueError` instead of `AssertionError`).
+- ✅ **#20 unbounded inputs / pagination** — `a5c6b63` (`max_tokens` bounded
+  `ge=1 le=16384` on all chat/agent models; `/search top_k` `ge=1 le=20`; explicit
+  `limit`/`offset` on `/documents/metadata` + `/jobs` and in the stores; list_all
+  truncation is explicit).
+- ✅ **#21 missing SQLite `busy_timeout`** — `245b600` (all 4 stores: `timeout=10.0` +
+  `PRAGMA busy_timeout=10000`).
+- ✅ **#22 inconsistent error handling + `str(e)` leakage** — `53defff` (catch-all
+  `Exception` handler → sanitized `{"detail": "internal server error"}`; HTTPException
+  and validation errors untouched; `/chat*` 502s and `/fetch` 502 sanitized; new
+  hermetic error-handling tests; conftest pins `OTEL_TRACING_ENABLED=false` so tests
+  importing `app.main` don't flush spans to a missing collector).
+- ✅ **#23 sequential embeddings, no retry** — `d7da7e0` (batch all texts in one
+  request; retry ×3 with exponential backoff on 429/5xx/transport errors; timeout
+  configurable via `EMBEDDING_TIMEOUT_SECONDS`; new unit tests).
+- ✅ **#24 unauthenticated `POST /models`** — `9b22859` (models router now behind
+  `PROTECTED`, matching chat/documents/jobs).
+- ✅ **#25 unbounded `/fetch` bodies** — `8e7f963` (streams with a 1 MB cap → 413,
+  plus upfront Content-Length check).
+- ✅ **#26 Redis limiter outage 500-storm** — `da64389` (fails open with a warning
+  when Redis is unreachable; new test).
+- ✅ **#27 per-request graph compile + MCP spawn** — `3c4fdf4` (compiled LangGraph
+  cached by `max_tokens`; one lazy shared MCP stdio session per process, reset only
+  on MCP-level failures).
+All pushed; 11/11 closed.
+
 ---
 
 ## 5. Finished Work Index (for historical context)
@@ -260,7 +296,10 @@ suite re-ran green on the new image (60/60; store restored to pristine state aft
   the full phase-by-phase story, best practices, tradeoffs, and scale concerns now live
   in `THE-STORY.md`.
 - Topics 25 (deployment) and 26 (prod architecture) map to Phases 6/7 above and are
-  complete; Topic 27 (capstone) is the next challenge.
+  complete; Topic 27 (capstone) is the next challenge — the Phase 8 backlog
+  (#17–#27) that the audit surfaced is now fully fixed and closed. Their tradeoffs,
+  where intentionally kept (in-memory rate limiter default, single worker, SQLite,
+  unbounded-at-scale items), live in `THE-STORY.md`.
 - The Docker deploy phase (`bd7f638`) made the full stack live, fixed
   Loki/Tempo healthchecks (static curl), otel-collector metrics, promtail config, OTLP tracing,
   and the Groq model rename. All 8 services verified healthy.
