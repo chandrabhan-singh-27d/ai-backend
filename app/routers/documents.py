@@ -1,7 +1,7 @@
 import asyncio
 
-from fastapi import APIRouter, status
-from pydantic import BaseModel
+from fastapi import APIRouter, Query, status
+from pydantic import BaseModel, Field
 
 from app.dependencies import PROTECTED
 from app.services.embeddings import embed
@@ -21,7 +21,7 @@ class IngestRequest(BaseModel):
 
 class SearchRequest(BaseModel):
     query: str
-    top_k: int = 3
+    top_k: int = Field(default=3, ge=1, le=20)
 
 
 class SearchResult(BaseModel):
@@ -52,8 +52,11 @@ async def search_documents(request: SearchRequest) -> list[SearchResult]:
 
 
 @router.get("/documents/metadata")
-def list_metadata() -> list[dict[str, object]]:
-    return get_metadata_store().list_documents()
+def list_metadata(
+    limit: int = Query(default=100, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
+) -> list[dict[str, object]]:
+    return get_metadata_store().list_documents(limit=limit, offset=offset)
 
 
 @router.delete("/documents/{doc_id}")

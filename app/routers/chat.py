@@ -4,7 +4,7 @@ from collections.abc import AsyncIterator
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.config import LLM_MAX_TOKENS, LLM_MODEL
 from app.dependencies import PROTECTED
@@ -34,7 +34,7 @@ async def _guarded(events: AsyncIterator[dict[str, object]]) -> AsyncIterator[di
 class ChatRequest(BaseModel):
     message: str
     stream: bool = False
-    max_tokens: int = LLM_MAX_TOKENS
+    max_tokens: int = Field(default=LLM_MAX_TOKENS, ge=1, le=16384)
 
 
 class ChatResponse(BaseModel):
@@ -45,7 +45,7 @@ class ChatResponse(BaseModel):
 class ToolChatRequest(BaseModel):
     message: str
     stream: bool = False
-    max_tokens: int = LLM_MAX_TOKENS
+    max_tokens: int = Field(default=LLM_MAX_TOKENS, ge=1, le=16384)
 
 
 class ToolChatResponse(BaseModel):
@@ -56,7 +56,7 @@ class ToolChatResponse(BaseModel):
 class AgentRequest(BaseModel):
     question: str
     stream: bool = False
-    max_tokens: int = LLM_MAX_TOKENS
+    max_tokens: int = Field(default=LLM_MAX_TOKENS, ge=1, le=16384)
 
 
 class AgentResponse(BaseModel):
@@ -65,7 +65,7 @@ class AgentResponse(BaseModel):
 
 class MCPAgentRequest(BaseModel):
     question: str
-    max_tokens: int = LLM_MAX_TOKENS
+    max_tokens: int = Field(default=LLM_MAX_TOKENS, ge=1, le=16384)
 
 
 class MCPAgentResponse(BaseModel):

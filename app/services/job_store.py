@@ -104,13 +104,13 @@ class JobStore:
             job["result"] = json.loads(job["result"])
         return job
 
-    def list(self, limit: int = 20) -> list[dict[str, object]]:
+    def list(self, limit: int = 20, offset: int = 0) -> list[dict[str, object]]:
         with self._connect() as conn:
             rows = conn.execute(
                 "SELECT id, kind, status, payload, result, error, attempts, "
                 "created_at, started_at, finished_at FROM jobs "
-                "ORDER BY created_at DESC LIMIT ?",
-                (max(1, min(limit, 100)),),
+                "ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                (max(1, min(limit, 100)), max(0, offset)),
             ).fetchall()
         jobs: list[dict[str, object]] = []
         for row in rows:

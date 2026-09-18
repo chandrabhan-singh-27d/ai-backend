@@ -85,10 +85,10 @@ class VectorStore:
     def count(self) -> int:
         return self.client.count(collection_name=self.collection, exact=True).count
 
-    def list_all(self) -> list[dict[str, str]]:
+    def list_all(self, limit: int = 1000) -> list[dict[str, str]]:
         records = self.client.scroll(
             collection_name=self.collection,
-            limit=1000,
+            limit=max(1, min(limit, 1000)),
             with_payload=True,
         )[0]
 

@@ -53,11 +53,12 @@ class MetadataStore:
             ).fetchone()
         return cast("dict[str, object] | None", dict(row)) if row else None
 
-    def list_documents(self) -> list[dict[str, object]]:
+    def list_documents(self, limit: int = 100, offset: int = 0) -> list[dict[str, object]]:
         with self._connect() as conn:
             rows = conn.execute(
                 "SELECT doc_id, title, source, content_hash, chunk_count, created_at "
-                "FROM documents ORDER BY created_at"
+                "FROM documents ORDER BY created_at, doc_id LIMIT ? OFFSET ?",
+                (max(1, min(limit, 1000)), max(0, offset)),
             ).fetchall()
         return [cast("dict[str, object]", dict(row)) for row in rows]
 
