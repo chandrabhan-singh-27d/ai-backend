@@ -47,6 +47,26 @@ def _make_redis_limiter(monkeypatch, now: list[float]) -> tuple[RedisRateLimiter
     return limiter, client
 
 
+class RaisingRedis:
+    def incr(self, key: str) -> int:
+        raise ConnectionError("redis down")
+
+    def expire(self, key: str, seconds: int) -> int:
+        raise ConnectionError("redis down")
+
+
+def test_redis_fails_open_when_backend_unavailable(monkeypatch) -> None:
+    now = [1000.0]
+    monkeypatch.setattr("app.services.rate_limiter.time.time", lambda: now[0])
+    limiter = RedisRateLimiter(limit=2, window_seconds=60, redis_url="redis://localhost:6379")
+    limiter._client = RaisingRedis()
+
+    allowed, remaining = limiter.allow("key-a")
+
+    assert allowed is True
+    assert remaining == 2
+
+
 def test_redis_fixed_window_limits(monkeypatch) -> None:
     now = [1000.0]
     limiter, client = _make_redis_limiter(monkeypatch, now)

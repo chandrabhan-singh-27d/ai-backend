@@ -1,6 +1,9 @@
+import logging
 import time
 from collections import defaultdict, deque
 from typing import Any, cast
+
+logger = logging.getLogger("app.services.rate_limiter")
 
 
 class RateLimiter:
@@ -39,9 +42,15 @@ class RedisRateLimiter(RateLimiter):
 
     def allow(self, key: str) -> tuple[bool, int]:
         window_key = f"rate:{key}:{int(time.time()) // self.window_seconds}"
-        count = int(self._client.incr(window_key))
-        if count == 1:
-            self._client.expire(window_key, self.window_seconds)
+        try:
+            count = int(self._client.incr(window_key))
+            if count == 1:
+                self._client.expire(window_key, self.window_seconds)
+        except Exception:
+            # Fail open: an outage in the shared counter must not 500 every request
+            # behind auth; log and allow until Redis recovers.
+            logger.warning("redis_rate_limiter_unavailable_failing_open key=%s", key)
+            return True, self.limit
         if count <= self.limit:
             return True, self.limit - count
         return False, 0
