@@ -1,8 +1,11 @@
 import os
 
 # --- LLM ---
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 LLM_MODEL = os.getenv("LLM_MODEL", "qwen/qwen3.8-27b")
 LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "400"))
+LLM_TIMEOUT_SECONDS = float(os.getenv("LLM_TIMEOUT_SECONDS", "600"))
+LLM_MAX_RETRIES = int(os.getenv("LLM_MAX_RETRIES", "2"))
 LLM_REASONING_FORMAT = os.getenv("LLM_REASONING_FORMAT", "hidden")
 LLM_REASONING_EFFORT = os.getenv("LLM_REASONING_EFFORT", "none")
 GROQ_BASE_URL = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
@@ -47,6 +50,17 @@ REDIS_URL = os.getenv("REDIS_URL", "")
 
 # --- Logging ---
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+
+# --- Observability ---
+OTEL_EXPORTER_OTLP_ENDPOINT = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318")
+OTEL_TRACING_ENABLED = os.getenv("OTEL_TRACING_ENABLED", "true").lower() in {
+    "1",
+    "true",
+    "yes",
+}
+
+# --- Demo endpoints (/slow-sync, /slow-async, /slow-blocked) ---
+DEMO_ENDPOINTS = os.getenv("DEMO_ENDPOINTS", "false").lower() in {"1", "true", "yes"}
 
 # --- Eval (tools/run_eval.py) ---
 EVAL_JUDGE_MODEL = os.getenv("EVAL_JUDGE_MODEL", "openai/gpt-oss-120b")
