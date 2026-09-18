@@ -1,7 +1,6 @@
 import inspect
 import json
 import logging
-import os
 from collections.abc import AsyncIterator, Callable
 from time import perf_counter
 from typing import Any
@@ -19,11 +18,14 @@ from openai.types.chat.chat_completion_message_function_tool_call import (
 from openai.types.completion_usage import CompletionUsage
 
 from app.config import (
+    GROQ_API_KEY,
     GROQ_BASE_URL,
+    LLM_MAX_RETRIES,
     LLM_MAX_TOKENS,
     LLM_MODEL,
     LLM_REASONING_EFFORT,
     LLM_REASONING_FORMAT,
+    LLM_TIMEOUT_SECONDS,
 )
 from app.services.embeddings import embed
 from app.services.metrics import LLM_TOKENS, LLM_TTFT, measure_llm_call
@@ -32,7 +34,17 @@ from app.services.vector_store import get_store
 
 logger = logging.getLogger("app.services.llm")
 
-client = AsyncOpenAI(api_key=os.environ["GROQ_API_KEY"], base_url=GROQ_BASE_URL)
+if not GROQ_API_KEY:
+    raise RuntimeError(
+        "GROQ_API_KEY is not set; copy .env.example to .env and add your key"
+    )
+
+client = AsyncOpenAI(
+    api_key=GROQ_API_KEY,
+    base_url=GROQ_BASE_URL,
+    timeout=LLM_TIMEOUT_SECONDS,
+    max_retries=LLM_MAX_RETRIES,
+)
 
 
 def log_llm_usage(segment: str, tools_enabled: bool, total_tokens: int) -> None:

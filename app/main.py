@@ -11,6 +11,7 @@ from contextlib import asynccontextmanager  # noqa: E402
 from fastapi import FastAPI  # noqa: E402
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor  # noqa: E402
 
+from app.config import DEMO_ENDPOINTS  # noqa: E402
 from app.middlewares.request_context import request_context_middleware  # noqa: E402
 from app.routers import (  # noqa: E402
     chat,
@@ -46,6 +47,8 @@ app.middleware("http")(request_context_middleware)
 app.include_router(health.router)
 app.include_router(models.router)
 app.include_router(demo.router)
+if DEMO_ENDPOINTS:
+    app.include_router(demo.demo_router)
 app.include_router(chat.router)
 app.include_router(embeddings.router)
 app.include_router(documents.router)

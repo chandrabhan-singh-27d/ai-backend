@@ -40,17 +40,6 @@ def ingest_document(request: IngestRequest) -> dict[str, str]:
         },
     )
     return {"status": "accepted", "job_id": job_id}
-    # embedding = embed([request.text])
-    # get_store().add(doc_id=request.id, text=request.text, embedding=embedding[0])
-    # content_hash = hashlib.sha256(request.text.encode()).hexdigest()
-    # get_metadata_store().add_document(
-    #     doc_id=request.id,
-    #     title=request.title or request.id,
-    #     content_hash=content_hash,
-    #     source=request.source,
-    #     chunk_count=1,
-    # )
-    # return {"status": "ok", "id": request.id}
 
 
 @router.post("/search")

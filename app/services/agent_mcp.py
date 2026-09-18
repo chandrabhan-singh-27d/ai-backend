@@ -14,19 +14,29 @@ from openai.types.chat.chat_completion_message_function_tool_call import (
 
 from app.config import (
     AGENT_MAX_STEPS,
+    GROQ_API_KEY,
     GROQ_BASE_URL,
+    LLM_MAX_RETRIES,
     LLM_MAX_TOKENS,
     LLM_MODEL,
     LLM_REASONING_EFFORT,
     LLM_REASONING_FORMAT,
+    LLM_TIMEOUT_SECONDS,
 )
 from app.services.metrics import LLM_TOKENS, measure_llm_call
 
 logger = logging.getLogger("app.services.agent_mcp")
 
+if not GROQ_API_KEY:
+    raise RuntimeError(
+        "GROQ_API_KEY is not set; copy .env.example to .env and add your key"
+    )
+
 client = AsyncOpenAI(
-    api_key=os.environ["GROQ_API_KEY"],
+    api_key=GROQ_API_KEY,
     base_url=GROQ_BASE_URL,
+    timeout=LLM_TIMEOUT_SECONDS,
+    max_retries=LLM_MAX_RETRIES,
 )
 
 MCP_PARAMS = StdioServerParameters(
