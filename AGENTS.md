@@ -232,7 +232,7 @@ suite re-ran green on the new image (60/60; store restored to pristine state aft
 - Scale concerns (single-worker rate limiting, Qdrant sizes, LLM latency SLO) are
   documented in `THE-STORY.md` (Phase 7).
 
-### ✅ Phase 7 — Replace PROGRESS.md / CONTINUATION.md with a narrative doc — **DONE**
+### ✅ Phase 7 — Replace PROGRESS.md / CONTINUATION.md with a narrative doc — **DONE** (`3e297fb`)
 - Deleted `PROGRESS.md` and `CONTINUATION.md`, created a single `THE-STORY.md` project
   document that:
   - **Tells the story** — why the app exists, its ideology (guided discovery,
