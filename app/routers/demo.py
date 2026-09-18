@@ -12,6 +12,9 @@ from app.services.ssrf import InvalidFetchUrl, validate_fetch_url
 router = APIRouter()
 logger = logging.getLogger("app.routers.demo")
 
+# Cap on fetched response bodies (protects memory from hostile/oversized upstreams).
+MAX_FETCH_BYTES = 1_000_000
+
 
 class FetchResponse(TypedDict):
     url: str
@@ -31,13 +34,26 @@ async def fetch_url(url: str) -> FetchResponse:
     except InvalidFetchUrl as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     try:
-        async with httpx.AsyncClient(follow_redirects=False, timeout=10.0) as client:
-            response = await client.get(url)
+        async with (
+            httpx.AsyncClient(follow_redirects=False, timeout=10.0) as client,
+            client.stream("GET", url) as response,
+        ):
+            response.raise_for_status()
+            content_length = response.headers.get("content-length")
+            if content_length is not None and int(content_length) > MAX_FETCH_BYTES:
+                raise HTTPException(status_code=413, detail="response too large")
+            body = bytearray()
+            async for chunk in response.aiter_bytes():
+                body.extend(chunk)
+                if len(body) > MAX_FETCH_BYTES:
+                    raise HTTPException(status_code=413, detail="response too large")
         return {
             "url": url,
             "status": response.status_code,
-            "content_length": len(response.text),
+            "content_length": len(body),
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.warning("fetch_failed url=%s error=%s", url, e)
         raise HTTPException(status_code=502, detail="fetch failed") from e
