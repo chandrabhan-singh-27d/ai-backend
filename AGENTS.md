@@ -200,22 +200,37 @@ All 9 backlog issues closed, each in its own focused commit (ruff + smoke per co
   stale-row reclaim w/ `JOB_HEARTBEAT_TIMEOUT_SECONDS`, `GET /jobs`).
 - ✅ **#12 MCP writes sync metadata** — `631cdba` (add/delete → SQLite rows).
 - ✅ **#13 SSRF /fetch** — `72c4d88` (authenticated + `validate_fetch_url` private-range
-  guard; `/slow-*` stay public).
+  guard; `/slow-*` public demo endpoints were later gated behind `DEMO_ENDPOINTS` in Phase 6).
 - ✅ **#14 rate limiter strategy** — `3983558` (`RateLimiter` ABC: `MemoryRateLimiter`
   default/single-worker, `RedisRateLimiter` fixed-window for multi-worker via
   `RATE_LIMIT_STRATEGY`/`REDIS_URL`; compose pins memory + documents the constraint).
 - ✅ **#15 calculate() hardened** — `de2e208` (eval → whitelist AST evaluator).
 - ✅ **#16 .env import order** — `528189d` (`load_dotenv()` before app imports).
 
-Remaining gate before Phase 6: rebuild the Docker image (`docker compose up -d --build`)
-so the live stack runs these fixes, then re-run the full verify + live integration suite.
+The Docker image was rebuilt by the user (17:35) and the full verify + live integration
+suite re-ran green on the new image (60/60; store restored to pristine state afterwards).
 
-### ⬜ Phase 6 — Production-ready hardening (after ALL Phase-4/5 backlog issues are fixed)
-- CI/CD: extend `.github/workflows/lint.yml` → add build (docker build), tests, maybe deploy.
-- Env hygiene: `.env.example` for everything; config docs; health/readiness split.
-- Security: SSRF guard removed/fixed, secrets handling, dependency audit (uv audit).
-- Docker: non-root already used; pin base images; healthcheck pass; trim image size.
-- Scale concerns documented: single-worker rate limiting, Qdrant sizes, llm latency SLO.
+### ✅ Phase 6 — Production-ready hardening — **DONE** (`007bdb1`, `4dc3157`, `5f116f0`, `22373f0`, `81bc17a`)
+- ✅ **CI/CD** — `007bdb1`: workflow extended from lint-only to `CI` (ruff, pyright,
+  52 hermetic unit tests, and a `docker build` job per push).
+- ✅ **Env hygiene** — `4dc3157`: `.env.example` documents every var
+  (`GROQ_API_KEY`, `LLM_TIMEOUT_SECONDS`, `LLM_MAX_RETRIES`, `MODELS_DB_PATH`,
+  `JOB_MAX_ATTEMPTS`/`JOB_HEARTBEAT_TIMEOUT_SECONDS`, `DEMO_ENDPOINTS`); env reads
+  centralized in `app/config.py` (tracing.py no longer reads env directly).
+- ✅ **Health/readiness split** — `5f116f0`: `/health` liveness probe stays trivial;
+  `/health/ready` checks Qdrant + SQLite and returns 503 until usable.
+- ✅ **Security** — `81bc17a`: pyright strict CI fixed (all 20 errors in
+  llm/tools/ssrf/rate_limiter). `ab4e789`: SSRF IPv4-mapped-IPv6 bypass closed
+  (`::ffff:127.0.0.1`); `uv audit` clean — httpx2 raised 2.10.0 → 2.13.0 (6 CVEs),
+  unused `anthropic` pin dropped. `5f116f0`: friendly `GROQ_API_KEY` startup error,
+  config-driven LLM timeout/retries, demo `/slow-*` endpoints gated behind
+  `DEMO_ENDPOINTS` (default off; `/slow-blocked` was a public event-loop DoS).
+- ✅ **Docker** — `22373f0`: every image pinned to a proven tag (qdrant v1.19.1,
+  otel-collector-contrib 0.161.0, prometheus v3.14.0, tempo 2.10.8, loki 3.7.8,
+  promtail 3.6.11, grafana 13.2.2, base `python:3.14.7-slim`) + `restart:
+  unless-stopped` on all services. Non-root user and healthchecks already in place.
+- Scale concerns (single-worker rate limiting, Qdrant sizes, LLM latency SLO) are
+  documented in `THE-STORY.md` (Phase 7).
 
 ### ⬜ Phase 7 — Replace PROGRESS.md / CONTINUATION.md with a narrative doc
 Delete `PROGRESS.md` and `CONTINUATION.md`. Create a single `DOCS/` (or `THE-STORY.md`)
