@@ -1,4 +1,4 @@
-name: Lint & Typecheck
+name: CI
 
 on: [push]
 
@@ -21,3 +21,28 @@ jobs:
 
       - name: Run pyright
         run: uv run pyright app/ servers/
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install dependencies
+        run: uv sync --dev
+
+      - name: Run unit tests
+        run: uv run pytest -q -m "not integration"
+
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build image
+        run: docker build -t ai-backend:ci .
