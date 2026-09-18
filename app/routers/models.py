@@ -1,9 +1,10 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from app.dependencies import PROTECTED
 from app.services.model_registry import get_model_store
 
-router = APIRouter()
+router = APIRouter(dependencies=PROTECTED)
 
 
 class ModelCreate(BaseModel):
