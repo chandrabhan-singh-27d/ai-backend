@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from time import sleep
 from typing import TypedDict
 
@@ -9,6 +10,7 @@ from app.dependencies import PROTECTED
 from app.services.ssrf import InvalidFetchUrl, validate_fetch_url
 
 router = APIRouter()
+logger = logging.getLogger("app.routers.demo")
 
 
 class FetchResponse(TypedDict):
@@ -37,7 +39,8 @@ async def fetch_url(url: str) -> FetchResponse:
             "content_length": len(response.text),
         }
     except Exception as e:
-        raise HTTPException(status_code=502, detail=str(e)) from e
+        logger.warning("fetch_failed url=%s error=%s", url, e)
+        raise HTTPException(status_code=502, detail="fetch failed") from e
 
 
 # Teaching/demo endpoints. Registered only when DEMO_ENDPOINTS=true (default off);

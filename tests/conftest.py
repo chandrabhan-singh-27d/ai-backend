@@ -1,3 +1,7 @@
+import os
+
+os.environ.setdefault("OTEL_TRACING_ENABLED", "false")
+
 import pytest
 
 

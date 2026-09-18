@@ -5,10 +5,12 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import asyncio  # noqa: E402
+import logging  # noqa: E402
 from collections.abc import AsyncGenerator  # noqa: E402
 from contextlib import asynccontextmanager  # noqa: E402
 
-from fastapi import FastAPI  # noqa: E402
+from fastapi import FastAPI, Request  # noqa: E402
+from fastapi.responses import JSONResponse  # noqa: E402
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor  # noqa: E402
 
 from app.config import DEMO_ENDPOINTS  # noqa: E402
@@ -55,3 +57,12 @@ app.include_router(documents.router)
 app.include_router(rag.router)
 app.include_router(metrics.router)
 app.include_router(jobs.router)
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    logging.getLogger("app.main").exception(
+        "unhandled_exception",
+        extra={"extra_fields": {"path": request.url.path, "method": request.method}},
+    )
+    return JSONResponse(status_code=500, content={"detail": "internal server error"})

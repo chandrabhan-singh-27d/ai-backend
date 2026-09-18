@@ -85,7 +85,7 @@ async def chat_endpoint(request: ChatRequest) -> ChatResponse | StreamingRespons
         return ChatResponse(response=content, model=LLM_MODEL)
     except Exception as e:
         logger.exception("chat_endpoint_failed")
-        raise HTTPException(status_code=502, detail=str(e)) from e
+        raise HTTPException(status_code=502, detail="upstream request failed") from e
 
 
 @router.post("/chat/tools", response_model=ToolChatResponse)
@@ -109,7 +109,7 @@ async def tool_chat_endpoint(request: ToolChatRequest) -> ToolChatResponse | Str
         return ToolChatResponse(response=content, tool_used=tool_used)
     except Exception as e:
         logger.exception("tool_chat_endpoint_failed")
-        raise HTTPException(status_code=502, detail=str(e)) from e
+        raise HTTPException(status_code=502, detail="upstream request failed") from e
 
 
 @router.post("/agent", response_model=AgentResponse)
