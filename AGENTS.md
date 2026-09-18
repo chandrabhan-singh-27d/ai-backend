@@ -232,24 +232,32 @@ suite re-ran green on the new image (60/60; store restored to pristine state aft
 - Scale concerns (single-worker rate limiting, Qdrant sizes, LLM latency SLO) are
   documented in `THE-STORY.md` (Phase 7).
 
-### ⬜ Phase 7 — Replace PROGRESS.md / CONTINUATION.md with a narrative doc
-Delete `PROGRESS.md` and `CONTINUATION.md`. Create a single `DOCS/` (or `THE-STORY.md`)
-project document that:
-- **Tells the story** — why the app exists, its ideology, how we built it phase-by-phase.
-- **Best practices** applied (async IO, durable jobs, observability, OTel, auth/rate limits, SSE).
-- **Known shortcomings + rationale** — explicitly say "we know X, we chose Y because it avoids
-  over-engineering for this scale" (e.g. in-memory rate limiting, SQLite over Postgres,
-  single uvicorn worker, no Redis/queue broker, model registry stub, demo endpoints).
-- Update README links to point at the new doc (not PROGRESS/CONTINUATION).
-- Cross-check: remove any stale references to PROGRESS.md/CONTINUATION.md everywhere.
+### ✅ Phase 7 — Replace PROGRESS.md / CONTINUATION.md with a narrative doc — **DONE**
+- Deleted `PROGRESS.md` and `CONTINUATION.md`, created a single `THE-STORY.md` project
+  document that:
+  - **Tells the story** — why the app exists, its ideology (guided discovery,
+    incremental complexity, explain-the-why), how it was built phase-by-phase.
+  - **Best practices** applied (async IO, durable jobs, observability, OTel,
+    auth/rate limits, SSE, deterministic IDs, strict typing gates).
+  - **Known shortcomings + rationale** — an explicit table of tradeoffs ("we know X,
+    we chose Y because it avoids over-engineering for this scale": in-memory rate
+    limiting, SQLite over Postgres, single uvicorn worker, no Redis/queue broker,
+    model registry stub, demo endpoints) plus concrete scale concerns (Qdrant sizing,
+    LLM latency SLO, job retry backoff).
+  - README rewritten: links point at `THE-STORY.md` (not PROGRESS/CONTINUATION),
+    auth/API-key docs, complete endpoint table, correct run commands, pinned-image
+    notes. Cross-checked: no stale PROGRESS/CONTINUATION references remain (only
+    historical mentions in this roadmap).
 
 ---
 
-## 5. Finished Work Index (for historical context until Phase 7)
+## 5. Finished Work Index (for historical context)
 
-- Topics 1–24 tracked in `PROGRESS.md` / `CONTINUATION.md` (will be deleted in Phase 7).
-- Topics 25 (deployment), 26 (prod architecture), 27 (capstone) are untouched — they map to
-  Phases 6/7 above.
-- The Docker deploy phase (this work, commit `bd7f638`) made the full stack live, fixed
+- Topics 1–24 were tracked in `PROGRESS.md` / `CONTINUATION.md` (deleted in Phase 7);
+  the full phase-by-phase story, best practices, tradeoffs, and scale concerns now live
+  in `THE-STORY.md`.
+- Topics 25 (deployment) and 26 (prod architecture) map to Phases 6/7 above and are
+  complete; Topic 27 (capstone) is the next challenge.
+- The Docker deploy phase (`bd7f638`) made the full stack live, fixed
   Loki/Tempo healthchecks (static curl), otel-collector metrics, promtail config, OTLP tracing,
   and the Groq model rename. All 8 services verified healthy.

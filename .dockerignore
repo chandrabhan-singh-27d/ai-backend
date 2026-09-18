@@ -10,8 +10,7 @@ qdrant_storage
 config
 tools
 README.md
-PROGRESS.md
-CONTINUATION.md
+THE-STORY.md
 .github
 .vscode
 .ruff_cache
