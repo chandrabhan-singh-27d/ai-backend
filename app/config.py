@@ -25,6 +25,7 @@ RAG_TOP_K = int(os.getenv("RAG_TOP_K", "3"))
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
 EMBEDDING_DIM = int(os.getenv("EMBEDDING_DIM", "384"))
 HF_TOKEN = os.getenv("HF_TOKEN", "")
+EMBEDDING_TIMEOUT_SECONDS = float(os.getenv("EMBEDDING_TIMEOUT_SECONDS", "60"))
 HF_EMBEDDINGS_URL = os.getenv(
     "HF_EMBEDDINGS_URL",
     f"https://router.huggingface.co/hf-inference/models/{EMBEDDING_MODEL}/pipeline/feature-extraction",
