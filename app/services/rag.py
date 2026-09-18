@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from typing import TypedDict
 
@@ -35,7 +36,9 @@ async def answer_question(question: str, store: VectorStore | None = None) -> st
         store = store or get_store()
 
         with tracer.start_as_current_span("store.search"):
-            searched_documents = store.search(query_embedding, top_k=RAG_TOP_K)
+            searched_documents = await asyncio.to_thread(
+                store.search, query_embedding, RAG_TOP_K
+            )
 
         logger.info(
             "rag_retrieval",

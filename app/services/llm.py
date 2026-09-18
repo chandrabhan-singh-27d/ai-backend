@@ -1,3 +1,4 @@
+import asyncio
 import inspect
 import json
 import logging
@@ -295,14 +296,14 @@ async def chat_stream(
 
 async def _search_documents(query: str, top_k: int = 3) -> str:
     query_embedding = (await embed([query]))[0]
-    results = get_store().search(query_embedding, top_k=top_k)
+    results = await asyncio.to_thread(get_store().search, query_embedding, top_k)
     if not results:
         return "No results."
     return "\n".join(f"- [{r['id']}] {r['text']} (score: {r['score']:.3f})" for r in results)
 
 
-def _list_documents() -> str:
-    docs = get_store().list_all()
+async def _list_documents() -> str:
+    docs = await asyncio.to_thread(get_store().list_all)
     if not docs:
         return "No documents stored."
     return "\n".join(f"- [{doc['id']}] {doc['text'][:80]}" for doc in docs)
