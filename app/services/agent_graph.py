@@ -2,7 +2,7 @@
 import json
 import logging
 import operator
-from typing import Annotated, TypedDict, cast
+from typing import Annotated, Any, TypedDict, cast
 
 from langgraph.errors import GraphRecursionError
 from langgraph.graph import END, START, StateGraph
@@ -81,6 +81,17 @@ def _build_graph(max_tokens: int = LLM_MAX_TOKENS):
     return builder.compile()
 
 
+# Compiled graphs are stateless across ainvoke calls; rebuild only when
+# max_tokens changes (it is captured by the call_llm closure).
+_GRAPH_CACHE: dict[int, Any] = {}
+
+
+def _get_graph(max_tokens: int = LLM_MAX_TOKENS) -> Any:
+    if max_tokens not in _GRAPH_CACHE:
+        _GRAPH_CACHE[max_tokens] = _build_graph(max_tokens)
+    return _GRAPH_CACHE[max_tokens]
+
+
 async def run_tools(state: AgentState) -> dict[str, list[dict[str, object]]]:
     last_message = state["messages"][-1]
     raw_tool_calls = cast("list[object]", last_message["tool_calls"])
@@ -111,7 +122,7 @@ def route_after_llm(state: AgentState) -> str:
 
 
 async def run_agent_graph(question: str, max_tokens: int = LLM_MAX_TOKENS) -> str:
-    graph = _build_graph(max_tokens)
+    graph = _get_graph(max_tokens)
     try:
         result = await graph.ainvoke(
             {"messages": [{"role": "user", "content": question}]},

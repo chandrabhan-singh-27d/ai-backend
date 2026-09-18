@@ -1,8 +1,9 @@
+import asyncio
 import json
 import logging
 import os
 import sys
-from typing import TypedDict
+from typing import Any, TypedDict
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
@@ -65,78 +66,117 @@ def mcp_tools_to_openai(mcp_tools: list[Tool]) -> list[MCPTools]:
     ]
 
 
+# One stdio MCP subprocess per process, shared across requests (instead of
+# spawning servers/documents.py per /agent/mcp call). Reset on MCP-level errors.
+_mcp_resources: tuple[Any, Any, ClientSession] | None = None
+_mcp_session_lock = asyncio.Lock()
+
+
+async def _get_mcp_session() -> ClientSession:
+    global _mcp_resources
+    if _mcp_resources is not None:
+        return _mcp_resources[2]
+    async with _mcp_session_lock:
+        if _mcp_resources is not None:
+            return _mcp_resources[2]
+        read_cm = stdio_client(MCP_PARAMS)
+        read, write = await read_cm.__aenter__()
+        session_cm = ClientSession(read, write)
+        session = await session_cm.__aenter__()
+        try:
+            await session.initialize()
+        except Exception:
+            await session_cm.__aexit__(None, None, None)
+            await read_cm.__aexit__(None, None, None)
+            raise
+        _mcp_resources = (read_cm, session_cm, session)
+        return session
+
+
+async def _reset_mcp_session() -> None:
+    global _mcp_resources
+    resources, _mcp_resources = _mcp_resources, None
+    if resources is None:
+        return
+    read_cm, session_cm, _ = resources
+    logger.warning("resetting_mcp_session")
+    await session_cm.__aexit__(None, None, None)
+    await read_cm.__aexit__(None, None, None)
+
+
 async def run_mcp_agent(
     question: str, max_steps: int = AGENT_MAX_STEPS, max_tokens: int = LLM_MAX_TOKENS
 ) -> str:
-    async with (
-        stdio_client(MCP_PARAMS) as (read, write),
-        ClientSession(read, write) as session,
-    ):
-        await session.initialize()
-
+    session = await _get_mcp_session()
+    try:
         mcp_tools = await session.list_tools()
-        openai_tools = mcp_tools_to_openai(mcp_tools.tools)
+    except Exception:
+        await _reset_mcp_session()
+        raise
+    openai_tools = mcp_tools_to_openai(mcp_tools.tools)
 
-        messages: list[dict[str, object]] = [{"role": "user", "content": question}]
+    messages: list[dict[str, object]] = [{"role": "user", "content": question}]
 
-        for _step in range(max_steps):
-            with measure_llm_call(
-                model=LLM_MODEL, tools_enabled=True, segment="agent_mcp"
-            ):
-                response = await client.chat.completions.create(
-                    model=LLM_MODEL,
-                    messages=messages,  # type: ignore[arg-type]
-                    tools=openai_tools,  # type: ignore[arg-type]
-                    max_tokens=max_tokens,
-                    extra_body={
-                        "reasoning_format": LLM_REASONING_FORMAT,
-                        "reasoning_effort": LLM_REASONING_EFFORT,
-                    },
-                )
-            if response.usage is not None:
-                LLM_TOKENS.labels(model=LLM_MODEL, tools_enabled="true").inc(
-                    response.usage.total_tokens
-                )
+    for _step in range(max_steps):
+        with measure_llm_call(model=LLM_MODEL, tools_enabled=True, segment="agent_mcp"):
+            response = await client.chat.completions.create(
+                model=LLM_MODEL,
+                messages=messages,  # type: ignore[arg-type]
+                tools=openai_tools,  # type: ignore[arg-type]
+                max_tokens=max_tokens,
+                extra_body={
+                    "reasoning_format": LLM_REASONING_FORMAT,
+                    "reasoning_effort": LLM_REASONING_EFFORT,
+                },
+            )
+        if response.usage is not None:
+            LLM_TOKENS.labels(model=LLM_MODEL, tools_enabled="true").inc(
+                response.usage.total_tokens
+            )
 
-            choice = response.choices[0]
+        choice = response.choices[0]
 
-            if not choice.message.tool_calls:
-                return choice.message.content or ""
+        if not choice.message.tool_calls:
+            return choice.message.content or ""
 
-            tool_call = choice.message.tool_calls[0]
-            if not isinstance(tool_call, ChatCompletionMessageFunctionToolCall):
-                raise ValueError(f"unsupported tool call type: {type(tool_call).__name__}")
-            tool_name = tool_call.function.name
-            tool_args = json.loads(tool_call.function.arguments)
+        tool_call = choice.message.tool_calls[0]
+        if not isinstance(tool_call, ChatCompletionMessageFunctionToolCall):
+            raise ValueError(f"unsupported tool call type: {type(tool_call).__name__}")
+        tool_name = tool_call.function.name
+        tool_args = json.loads(tool_call.function.arguments)
 
+        try:
             result = await session.call_tool(tool_name, tool_args)
+        except Exception:
+            await _reset_mcp_session()
+            raise
 
-            content = result.content[0]
-            if not isinstance(content, TextContent):
-                raise ValueError(f"unsupported MCP tool result type: {type(content).__name__}")
-            tool_result = content.text
+        content = result.content[0]
+        if not isinstance(content, TextContent):
+            raise ValueError(f"unsupported MCP tool result type: {type(content).__name__}")
+        tool_result = content.text
 
-            messages.append(
-                {
-                    "role": "assistant",
-                    "tool_calls": [
-                        {
-                            "id": tool_call.id,
-                            "type": "function",
-                            "function": {
-                                "name": tool_name,
-                                "arguments": tool_call.function.arguments,
-                            },
-                        }
-                    ],
-                }
-            )
-            messages.append(
-                {
-                    "role": "tool",
-                    "tool_call_id": tool_call.id,
-                    "content": tool_result,
-                }
-            )
+        messages.append(
+            {
+                "role": "assistant",
+                "tool_calls": [
+                    {
+                        "id": tool_call.id,
+                        "type": "function",
+                        "function": {
+                            "name": tool_name,
+                            "arguments": tool_call.function.arguments,
+                        },
+                    }
+                ],
+            }
+        )
+        messages.append(
+            {
+                "role": "tool",
+                "tool_call_id": tool_call.id,
+                "content": tool_result,
+            }
+        )
 
-        return "Agent reached max steps without a final answer."
+    return "Agent reached max steps without a final answer."
