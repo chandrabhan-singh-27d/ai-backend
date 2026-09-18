@@ -20,17 +20,27 @@ async def _ingest_document(payload: dict[str, object]) -> dict[str, object]:
     source = str(payload.get("source", "unknown"))
     content_hash = hashlib.sha256(text.encode()).hexdigest()
 
-    existing = get_metadata_store().find_by_content_hash(content_hash)
+    existing = await asyncio.to_thread(get_metadata_store().find_by_content_hash, content_hash)
     if existing is not None and str(existing["doc_id"]) != doc_id:
-        get_metadata_store().add_document(
-            doc_id=doc_id, title=title, content_hash=content_hash, source=source, chunk_count=1
+        await asyncio.to_thread(
+            get_metadata_store().add_document,
+            doc_id=doc_id,
+            title=title,
+            content_hash=content_hash,
+            source=source,
+            chunk_count=1,
         )
         return {"status": "duplicate", "id": doc_id, "deduped_against": existing["doc_id"]}
 
     embedding = await embed([text])
     await asyncio.to_thread(get_store().add, doc_id=doc_id, text=text, embedding=embedding[0])
-    get_metadata_store().add_document(
-        doc_id=doc_id, title=title, content_hash=content_hash, source=source, chunk_count=1
+    await asyncio.to_thread(
+        get_metadata_store().add_document,
+        doc_id=doc_id,
+        title=title,
+        content_hash=content_hash,
+        source=source,
+        chunk_count=1,
     )
 
     return {"status": "ok", "id": doc_id}
@@ -45,7 +55,7 @@ async def run_worker_loop(poll_interval: float = 0.5) -> None:
     store = get_job_store()
 
     while True:
-        job = store.claim()
+        job = await asyncio.to_thread(store.claim)
         if job is None:
             await asyncio.sleep(poll_interval)
             continue
@@ -53,10 +63,10 @@ async def run_worker_loop(poll_interval: float = 0.5) -> None:
         try:
             handler = JOB_HANDLERS[job["kind"]]
             result = await handler(job["payload"])
-            store.complete(job["id"], result=result)
+            await asyncio.to_thread(store.complete, job["id"], result=result)
         except Exception as e:
             logger.exception("job %s failed (attempt %d)", job["id"], job["attempts"] + 1)
             if job["attempts"] + 1 >= JOB_MAX_ATTEMPTS:
-                store.fail(job["id"], str(e))
+                await asyncio.to_thread(store.fail, job["id"], str(e))
             else:
-                store.requeue(job["id"], str(e))
+                await asyncio.to_thread(store.requeue, job["id"], str(e))
